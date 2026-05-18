@@ -3,7 +3,7 @@
 ## Beschreibung
 
 In diesem Repository befinden sich Skripts, um interessante Wetterdaten und Flusspegel zu sammeln, die zum Zeitpunkt 
-eines Fanges herrschten. Abgedeckt sind Teile der Havel um Brandenburg und der Elbe in Sachsen-Anhalt.
+eines Fanges herrschten.
 
 ## Setup
 
