@@ -167,6 +167,7 @@ def generate_catch_report(date: str,
                                longitude: float,
                                water_temperature_at_catch: float,
                                fish_length: float,
+                               water_turbidity: str,
                                photo_path: str | None = None,
                                n_days_past: int = 3,
                                n_days_future: int = 1):
@@ -308,11 +309,6 @@ def generate_catch_report(date: str,
         wind_direction_at_catch = get_nearest_value(df_weather, catch_datetime, "Windrichtung")
         weather_code_at_catch = get_nearest_value(df_weather, catch_datetime, "Wettercode")
         water_level_at_catch = get_nearest_value(df_water_level, catch_datetime, "Wasserstand")
-        # water_temperature_at_catch = get_nearest_value(
-        #     df_water_temperature,
-        #     catch_datetime,
-        #     "Wassertemperatur"
-        # )
 
         weather_type_at_catch = (
             describe_weather_code(weather_code_at_catch)
@@ -321,10 +317,11 @@ def generate_catch_report(date: str,
         )
 
         report_data = {
-            "Länge": format_value(fish_length,  "cm", 0),
+            "Länge": format_value(fish_length, "cm", 0),
             "Datum": catch_datetime.strftime("%d.%m.%Y"),
             "Fangzeit": catch_datetime.strftime("%H:%M Uhr"),
             "Fangort": f"{latitude:.5f}, {longitude:.5f}",
+            "Fangort-Link": f"https://www.google.com/maps?q={latitude:.5f},{longitude:.5f}",
             "Gewässer": water,
             "Mondphase": calculate_moon_phase(catch_datetime),
             "Wettertyp": weather_type_at_catch,
@@ -335,6 +332,7 @@ def generate_catch_report(date: str,
             "Windrichtung": describe_wind_direction(wind_direction_at_catch),
             "Pegelstelle": station.title(),
             "Wasserstand": format_value(water_level_at_catch, "cm", 0),
+            "Wassertrübung": water_turbidity,
         }
 
         print("-> Alle Daten erfolgreich geladen. Erstelle Diagramme...")
@@ -542,7 +540,6 @@ def generate_catch_report(date: str,
 
     print(f"-> PDF wurde erstellt: {pdf_path}")
     print("-> Diagramm-Fenster wird geöffnet.")
-    plt.show()
 
 
 def create_pdf_report(
@@ -551,47 +548,206 @@ def create_pdf_report(
     report_data,
     photo_path=None
 ):
+
+    PAGE_TOP = 0.95
+    PAGE_BOTTOM = 0.05
+
+    HEADER_H = 0.07
+
+    CARD_H = 0.06
+    CARD_ROWS = 2
+    CARD_GAP = 0.02
+
+    GAP_SECTION = 0.04
+
+    header_y = PAGE_TOP - HEADER_H
+
+    cards_top = header_y - GAP_SECTION
+    cards_height = CARD_ROWS * CARD_H + (CARD_ROWS - 1) * CARD_GAP
+    cards_bottom = cards_top - cards_height
+
+    content_top = cards_bottom - GAP_SECTION
+    content_height = 0.34
+    content_bottom = content_top - content_height
+
+    photo_top = content_bottom - GAP_SECTION
+    photo_bottom = PAGE_BOTTOM
+    photo_height = photo_top - photo_bottom
+
     with PdfPages(pdf_path) as pdf:
         report_figure = plt.figure(figsize=(8.27, 11.69))  # A4 portrait
-        report_figure.suptitle("Fangreport", fontsize=18, fontweight="bold", y=0.97)
+        report_figure.patch.set_facecolor("#f7f9fb")
 
-        table_axis = report_figure.add_axes((0.08, 0.50, 0.84, 0.38))
-        table_axis.axis("off")
+        # Kopfbereich
+        header_axis = report_figure.add_axes((0.06, header_y, 0.88, HEADER_H))
+        header_axis.set_facecolor("#1f4e79")
+        header_axis.set_xticks([])
+        header_axis.set_yticks([])
 
-        table_data = [[key, value] for key, value in report_data.items()]
-        table = table_axis.table(
-            cellText=table_data,
-            colLabels=["Feld", "Wert"],
-            loc="center",
-            cellLoc="left",
-            colLoc="left"
+        for spine in header_axis.spines.values():
+            spine.set_visible(False)
+
+        header_axis.text(
+            0.03,
+            0.62,
+            "Fangreport",
+            color="white",
+            fontsize=22,
+            fontweight="bold",
+            va="center"
         )
-        table.auto_set_font_size(False)
-        table.set_fontsize(9)
-        table.scale(1, 1.4)
+        header_axis.text(
+            0.03,
+            0.25,
+            f"{report_data.get('Gewässer', '')} · {report_data.get('Datum', '')} · {report_data.get('Fangzeit', '')}",
+            color="#dbe9f6",
+            fontsize=10,
+            va="center"
+        )
+        header_axis.text(
+            0.97,
+            0.50,
+            report_data.get("Länge", ""),
+            color="white",
+            fontsize=18,
+            fontweight="bold",
+            ha="right",
+            va="center"
+        )
 
-        for (row, col), cell in table.get_celld().items():
-            if row == 0:
-                cell.set_text_props(fontweight="bold")
-                cell.set_facecolor("#dddddd")
-            elif col == 0:
-                cell.set_text_props(fontweight="bold")
-                cell.set_facecolor("#f2f2f2")
+        # Kurze Zusammenfassung als Karten
+        summary_items = [
+            ("Wetter", report_data.get("Wettertyp", "Keine Daten")),
+            ("Luft", report_data.get("Lufttemperatur", "Keine Daten")),
+            ("Wasser", report_data.get("Wassertemperatur", "Keine Daten")),
+            (f"Pegel ({station})", report_data.get("Wasserstand", "Keine Daten")),
+            ("Wind", report_data.get("Wind", "Keine Daten")),
+            ("Mondphase", report_data.get("Mondphase", "Keine Daten")),
+            ("Luftdruck", report_data.get("Luftdruck", "Keine Daten")),
+            ("Wassertrübung", report_data.get("Wassertrübung", "Keine Daten")),
+        ]
 
-        notes_axis = report_figure.add_axes((0.08, 0.18, 0.40, 0.24))
-        notes_axis.set_title("Notizen", loc="left", fontsize=11, fontweight="bold")
+        card_width = 0.205
+        card_gap = 0.02
+        card_height = 0.06
+
+        top_row_y = cards_top - CARD_H
+        second_row_y = top_row_y - CARD_H - CARD_GAP
+
+        for index, (label, value) in enumerate(summary_items):
+
+            row = index // 4  # 0 oder 1
+            col = index % 4  # 0 bis 3
+
+            card_y = top_row_y if row == 0 else second_row_y
+
+            card_axis = report_figure.add_axes((
+                0.06 + col * (card_width + card_gap),
+                card_y,
+                card_width,
+                card_height
+            ))
+
+            card_axis.set_facecolor("white")
+            card_axis.set_xticks([])
+            card_axis.set_yticks([])
+
+            for spine in card_axis.spines.values():
+                spine.set_edgecolor("#d8dee6")
+                spine.set_linewidth(1)
+
+            card_axis.text(
+                0.06,
+                0.68,
+                label,
+                fontsize=8,
+                color="#6b7280",
+                fontweight="bold",
+                transform=card_axis.transAxes
+            )
+
+            card_axis.text(
+                0.06,
+                0.28,
+                value,
+                fontsize=10,
+                color="#111827",
+                transform=card_axis.transAxes
+            )
+
+        content_y = content_bottom
+
+        # Notizen rechts
+        notes_axis = report_figure.add_axes((0.52, content_y, 0.42, content_height))
+        notes_axis.set_facecolor("white")
+        notes_axis.set_title("Notizen", loc="left", fontsize=12, fontweight="bold", pad=10)
         notes_axis.set_xticks([])
         notes_axis.set_yticks([])
+
         for spine in notes_axis.spines.values():
             spine.set_visible(True)
+            spine.set_edgecolor("#d8dee6")
+            spine.set_linewidth(1)
 
-        for y_position in np.linspace(0.85, 0.15, 6):
-            notes_axis.axhline(y_position, color="lightgray", linewidth=0.8)
+        for y_position in np.linspace(0.88, 0.12, 10):
+            notes_axis.axhline(
+                y_position,
+                xmin=0.05,
+                xmax=0.95,
+                color="#d1d5db",
+                linewidth=0.8
+            )
 
-        photo_axis = report_figure.add_axes((0.55, 0.18, 0.34, 0.24))
-        photo_axis.set_title("Foto", loc="left", fontsize=11, fontweight="bold")
+        notes_axis.text(
+            0.05,
+            0.94,
+            "Beobachtungen, Köder, Strömung, Bisse ...",
+            fontsize=8,
+            color="#9ca3af",
+            transform=notes_axis.transAxes
+        )
+
+        # Freie Fläche für Skizze unterhalb der Fangdaten
+        sketch_axis = report_figure.add_axes((0.06, content_y, 0.42, content_height))
+        sketch_axis.set_facecolor("white")
+        title_obj = sketch_axis.set_title(
+            f"Angelplatz ({report_data.get("Fangort", "Keine Daten")}) ↗",
+            loc="left",
+            fontsize=12,
+            fontweight="bold",
+            pad=10
+        )
+        title_obj.set_url(report_data.get("Fangort-Link"))
+        sketch_axis.set_xticks([])
+        sketch_axis.set_yticks([])
+
+        for spine in sketch_axis.spines.values():
+            spine.set_visible(True)
+            spine.set_edgecolor("#d8dee6")
+            spine.set_linewidth(1)
+
+        sketch_axis.text(
+            0.10,
+            0.94,
+            "Skizze ...",
+            ha="center",
+            va="center",
+            color="#c0c4cc",
+            fontsize=9,
+            transform=sketch_axis.transAxes
+        )
+
+        # Foto-Bereich unten über die volle Breite
+        photo_axis = report_figure.add_axes((0.06, photo_bottom, 0.88, photo_height))
+        photo_axis.set_facecolor("white")
+        photo_axis.set_title("Foto", loc="left", fontsize=12, fontweight="bold", pad=10)
         photo_axis.set_xticks([])
         photo_axis.set_yticks([])
+
+        for spine in photo_axis.spines.values():
+            spine.set_visible(True)
+            spine.set_edgecolor("#d8dee6")
+            spine.set_linewidth(1)
 
         if photo_path:
             try:
@@ -606,7 +762,8 @@ def create_pdf_report(
                     f"Foto konnte nicht geladen werden:\n{e}",
                     ha="center",
                     va="center",
-                    wrap=True
+                    wrap=True,
+                    color="#6b7280"
                 )
         else:
             photo_axis.text(
@@ -615,7 +772,8 @@ def create_pdf_report(
                 "Hier kann ein Foto eingefügt werden",
                 ha="center",
                 va="center",
-                color="gray"
+                color="#9ca3af",
+                fontsize=11
             )
 
         pdf.savefig(report_figure)
@@ -627,9 +785,9 @@ def create_pdf_report(
 
 
 if __name__ == "__main__":
-    station = sys.argv[1]
-    date = sys.argv[2]
-    catchtime = sys.argv[3]
+    date = sys.argv[1]
+    catchtime = sys.argv[2]
+    station = sys.argv[3]
 
     try:
         latitude = float(sys.argv[4])
@@ -637,7 +795,7 @@ if __name__ == "__main__":
     except IndexError as e:
         raise ValueError(
             "Latitude und Longitude müssen angegeben werden. "
-            "Beispiel: python wetterdaten.py \"TWIELENFLETH SIEL\" 2026-05-17 18:30 53.60 9.55"
+            "Beispiel: python fangreport.py \"TWIELENFLETH SIEL\" 2026-05-17 18:30 53.60 9.55 72 14.5 \"leicht getrübt\""
         ) from e
     except ValueError as e:
         raise ValueError(
@@ -656,10 +814,21 @@ if __name__ == "__main__":
 
     fish_length = int(sys.argv[6])
     water_temperature = float(sys.argv[7])
-    photo_path = sys.argv[8] if len(sys.argv) > 8 else None
+    water_turbidity = sys.argv[8]
+    photo_path = sys.argv[9] if len(sys.argv) > 9 else None
 
     try:
-        generate_catch_report(station, date, catchtime, latitude, longitude, water_temperature, fish_length, photo_path)
+        generate_catch_report(
+            date,
+            catchtime,
+            station,
+            latitude,
+            longitude,
+            water_temperature,
+            fish_length,
+            water_turbidity,
+            photo_path
+        )
     except ValueError as e:
         print(f"❌ Eingabefehler: {e}")
         raise SystemExit(1)
