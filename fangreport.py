@@ -1,4 +1,4 @@
-import sys
+import argparse
 
 import requests
 import pandas as pd
@@ -7,6 +7,7 @@ import matplotlib.dates as mdates
 from matplotlib.lines import Line2D
 from matplotlib.backends.backend_pdf import PdfPages
 import numpy as np
+import scipy.stats as stats
 from datetime import datetime, timedelta
 from PIL import Image
 
@@ -89,33 +90,6 @@ def format_value(value, unit="", decimals=1):
     return f"{value:.{decimals}f} {unit}".strip()
 
 
-def describe_wind_direction(degrees):
-    if degrees is None or pd.isna(degrees):
-        return "Keine Daten"
-
-    directions = [
-        "Nord",
-        "Nordnordost",
-        "Nordost",
-        "Ostnordost",
-        "Ost",
-        "Ostsüdost",
-        "Südost",
-        "Südsüdost",
-        "Süd",
-        "Südsüdwest",
-        "Südwest",
-        "Westsüdwest",
-        "West",
-        "Westnordwest",
-        "Nordwest",
-        "Nordnordwest",
-    ]
-
-    index = round(float(degrees) / 22.5) % 16
-    return directions[index]
-
-
 def pegelonline_stations_dict():
     """
     Fetches data from the Pegel Online API and returns a dictionary containing station information.
@@ -160,17 +134,91 @@ def pegelonline_stations_dict():
     return pegel_dict
 
 
+def wind_direction_arrow(deg):
+    if deg is None or deg == "Keine Daten":
+        return ""
+
+    try:
+        deg = float(deg)
+    except:
+        return ""
+
+    arrows = ["↑", "↗", "→", "↘", "↓", "↙", "←", "↖"]
+
+    # Drehe um 180° für Pfeil in Blasrichtung
+    return arrows[((round(deg / 45) % 8) + 4) % 8]
+
+
+def trend_arrow(slope, threshold):
+    if slope is None:
+        return ""
+
+    try:
+        slope = float(slope)
+    except:
+        return ""
+
+    if slope > threshold:
+        return "↗"
+    elif slope < -threshold:
+        return "↘"
+    return "→"
+
+
+def MetricTile(label, value, meta=None):
+    """
+    meta kann enthalten:
+    - unit
+    - trend (slope: float)
+    - direction (degrees)
+    - threshold
+    - color_mode
+    """
+
+    meta = meta or {}
+
+    # 1. Basiswert
+    display_value = value
+
+    # 2. Windrichtung
+    if meta.get("direction") is not None:
+        display_value = f"{value} {wind_direction_arrow(meta['direction'])}"
+
+    # 3. Trend
+    if "trend" in meta:
+        slope = meta["trend"]
+        threshold = meta.get("threshold")
+        arrow = trend_arrow(slope, threshold)
+        display_value = f"{value} {arrow}"
+
+    # 4. Farbe optional
+    color = "#111827"
+
+    if "trend" in meta and meta["trend"] is not None:
+        slope = float(meta["trend"])
+        threshold = np.abs(meta.get("threshold"))
+        if slope > threshold:
+            color = "#16a34a"   # grün
+        elif slope < -threshold:
+            color = "#dc2626"   # rot
+        else:
+            color = "#6b7280"
+
+    return label, display_value, color
+
+
 def generate_catch_report(date: str,
-                               time_of_catch: str,
-                               station: str,
-                               latitude: float,
-                               longitude: float,
-                               water_temperature_at_catch: float,
-                               fish_length: float,
-                               water_turbidity: str,
-                               photo_path: str | None = None,
-                               n_days_past: int = 3,
-                               n_days_future: int = 1):
+                          time_of_catch: str,
+                          station: str,
+                          latitude: float,
+                          longitude: float,
+                          water_temperature_at_catch: float,
+                          species: str,
+                          fish_length: float,
+                          water_turbidity: str,
+                          photo_path: str | None = None,
+                          n_days_past: int = 3,
+                          n_days_future: int = 1):
     # Datum im YYYY-MM-TT Format
     stations_dict = pegelonline_stations_dict()
 
@@ -317,6 +365,7 @@ def generate_catch_report(date: str,
         )
 
         report_data = {
+            "Fischart": species,
             "Länge": format_value(fish_length, "cm", 0),
             "Datum": catch_datetime.strftime("%d.%m.%Y"),
             "Fangzeit": catch_datetime.strftime("%H:%M Uhr"),
@@ -329,11 +378,98 @@ def generate_catch_report(date: str,
             "Wassertemperatur": format_value(water_temperature_at_catch, "°C"),
             "Luftdruck": format_value(air_pressure_at_catch, "hPa", 0),
             "Wind": format_value(wind_speed_at_catch, "km/h", 0),
-            "Windrichtung": describe_wind_direction(wind_direction_at_catch),
             "Pegelstelle": station.title(),
             "Wasserstand": format_value(water_level_at_catch, "cm", 0),
             "Wassertrübung": water_turbidity,
         }
+
+        def slope_of_trend(df, keyword, timeframe_m: int = 360):
+            # Berechne den Anstieg einer äquidistanten Zeitreihe in den letzten timeframe_m Minuten.
+            time_delta_m = (df.index[1] - df.index[0]).to_numpy().astype("timedelta64[m]").astype(int)
+            ind_timeframe_ago = timeframe_m // time_delta_m
+
+            nearest_index = df.index.get_indexer([catch_datetime], method="nearest")[0]
+            recent_level = df[keyword].to_numpy()[nearest_index - ind_timeframe_ago: nearest_index]
+
+            # Berechne stündlichen Anstieg
+            time_delta_h = time_delta_m / 60
+            timeframe_h = int(timeframe_m / 60)
+            slope = stats.linregress(np.arange(0, timeframe_h, time_delta_h), recent_level)[0]
+
+            return slope
+
+        water_slope = slope_of_trend(df_water_level, "Wasserstand")
+        air_pressure_slope = slope_of_trend(df_weather, "Luftdruck")
+        air_temperature_slope = slope_of_trend(df_weather, "Temperatur", 4320)  # 3 Tage
+
+        summary_items = [
+            MetricTile(
+                "Wetter",
+                report_data.get("Wettertyp", "Keine Daten")
+            ),
+
+            MetricTile(
+                "Luft",
+                report_data.get("Lufttemperatur", "Keine Daten"),
+                meta={
+                    "trend": (
+                        air_temperature_slope
+                    ),
+                    "threshold": (
+                        0.05
+                    )
+                }
+            ),
+
+            MetricTile(
+                "Wasser",
+                report_data.get("Wassertemperatur", "Keine Daten")
+            ),
+
+            MetricTile(
+                f"Pegel ({station})",
+                report_data.get("Wasserstand", "Keine Daten"),
+                meta={
+                    "trend": (
+                        water_slope
+                    ),
+                    "threshold": (
+                        0.5
+                    )
+                }
+            ),
+
+            MetricTile(
+                "Wind",
+                report_data.get("Wind", "Keine Daten"),
+                meta={
+                    "direction": wind_direction_at_catch
+                }
+            ),
+
+            MetricTile(
+                "Mondphase",
+                report_data.get("Mondphase", "Keine Daten")
+            ),
+
+            MetricTile(
+                "Luftdruck",
+                report_data.get("Luftdruck", "Keine Daten"),
+                meta={
+                    "trend": (
+                        air_pressure_slope
+                    ),
+                    "threshold": (
+                        1
+                    )
+                }
+            ),
+
+            MetricTile(
+                "Wassertrübung",
+                report_data.get("Wassertrübung", "Keine Daten")
+            ),
+        ]
 
         print("-> Alle Daten erfolgreich geladen. Erstelle Diagramme...")
 
@@ -535,6 +671,7 @@ def generate_catch_report(date: str,
         pdf_path=pdf_path,
         plot_figure=fig,
         report_data=report_data,
+        summary_items=summary_items,
         photo_path=photo_path
     )
 
@@ -546,6 +683,7 @@ def create_pdf_report(
     pdf_path,
     plot_figure,
     report_data,
+    summary_items,
     photo_path=None
 ):
 
@@ -607,25 +745,13 @@ def create_pdf_report(
         header_axis.text(
             0.97,
             0.50,
-            report_data.get("Länge", ""),
+            report_data.get("Fischart", "") + " " + report_data.get("Länge", ""),
             color="white",
             fontsize=18,
             fontweight="bold",
             ha="right",
             va="center"
         )
-
-        # Kurze Zusammenfassung als Karten
-        summary_items = [
-            ("Wetter", report_data.get("Wettertyp", "Keine Daten")),
-            ("Luft", report_data.get("Lufttemperatur", "Keine Daten")),
-            ("Wasser", report_data.get("Wassertemperatur", "Keine Daten")),
-            (f"Pegel ({station})", report_data.get("Wasserstand", "Keine Daten")),
-            ("Wind", report_data.get("Wind", "Keine Daten")),
-            ("Mondphase", report_data.get("Mondphase", "Keine Daten")),
-            ("Luftdruck", report_data.get("Luftdruck", "Keine Daten")),
-            ("Wassertrübung", report_data.get("Wassertrübung", "Keine Daten")),
-        ]
 
         card_width = 0.205
         card_gap = 0.02
@@ -634,7 +760,7 @@ def create_pdf_report(
         top_row_y = cards_top - CARD_H
         second_row_y = top_row_y - CARD_H - CARD_GAP
 
-        for index, (label, value) in enumerate(summary_items):
+        for index, (label, value, color) in enumerate(summary_items):
 
             row = index // 4  # 0 oder 1
             col = index % 4  # 0 bis 3
@@ -671,7 +797,7 @@ def create_pdf_report(
                 0.28,
                 value,
                 fontsize=10,
-                color="#111827",
+                color=color,
                 transform=card_axis.transAxes
             )
 
@@ -785,22 +911,70 @@ def create_pdf_report(
 
 
 if __name__ == "__main__":
-    date = sys.argv[1]
-    catchtime = sys.argv[2]
-    station = sys.argv[3]
+    parser = argparse.ArgumentParser()
+    parser.add_argument(
+        "--Datum",
+        type=str,
+        help="Datum des Fangs (YYYY-MM_DD)"
+    )
+    parser.add_argument(
+        "--Zeit",
+        type=str,
+        help="Zeitpunkt des Fangs (HH:MM)"
+    )
+    parser.add_argument(
+        "--Fischart",
+        type=str,
+        help="gefangene Fischart (z. B. 'Hecht', Wels', 'Zander')",
+        default="Wels"
+    )
+    parser.add_argument(
+        "--Messstation",
+        type=str,
+        help="Pegelmessstation verfügbar in pegelonline.wsv.de"
+    )
+    parser.add_argument(
+        "--Längengrad",
+        type=float,
+        help="Längengrad des Fangorts (-90 <= Längengrad <= 90)"
+    )
+    parser.add_argument(
+        "--Breitengrad",
+        type=float,
+        help="Breitengrad des Fangorts (-180 <= Breitengrad <= 180)"
+    )
+    parser.add_argument(
+        "--Länge",
+        type=int,
+        help="Länge des Fangs in ganzen Zentimetern"
+    )
+    parser.add_argument(
+        "--Wassertemperatur",
+        type=float,
+        help="Wassertemperatur in Grad Celsius"
+    )
+    parser.add_argument(
+        "--Wassertrübung",
+        type=str,
+        help="Beschreibung der Wassertrübung, z. B. 'klar' oder 'leicht eingetrübt'"
+    )
+    parser.add_argument(
+        "--Fotopfad",
+        type=str,
+        help="Speicherort des Fangfotos"
+    )
+    args = parser.parse_args()
 
-    try:
-        latitude = float(sys.argv[4])
-        longitude = float(sys.argv[5])
-    except IndexError as e:
-        raise ValueError(
-            "Latitude und Longitude müssen angegeben werden. "
-            "Beispiel: python fangreport.py \"TWIELENFLETH SIEL\" 2026-05-17 18:30 53.60 9.55 72 14.5 \"leicht getrübt\""
-        ) from e
-    except ValueError as e:
-        raise ValueError(
-            "Latitude und Longitude müssen Zahlen sein, z. B. 53.60 9.55."
-        ) from e
+    date = args.Datum
+    catchtime = args.Zeit
+    station = args.Messstation
+    latitude = args.Längengrad
+    longitude = args.Breitengrad
+    species = args.Fischart
+    fish_length = args.Länge
+    water_temperature = args.Wassertemperatur
+    water_turbidity = args.Wassertrübung
+    photo_path = args.Fotopfad
 
     if not -90 <= latitude <= 90:
         raise ValueError(
@@ -812,11 +986,6 @@ if __name__ == "__main__":
             f"Ungültiger Längengrad: {longitude}. Erwartet wird ein Wert zwischen -180 und 180."
         )
 
-    fish_length = int(sys.argv[6])
-    water_temperature = float(sys.argv[7])
-    water_turbidity = sys.argv[8]
-    photo_path = sys.argv[9] if len(sys.argv) > 9 else None
-
     try:
         generate_catch_report(
             date,
@@ -825,6 +994,7 @@ if __name__ == "__main__":
             latitude,
             longitude,
             water_temperature,
+            species,
             fish_length,
             water_turbidity,
             photo_path
