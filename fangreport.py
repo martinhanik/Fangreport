@@ -1,7 +1,10 @@
+import os
 import argparse
 
 import requests
 import pandas as pd
+import matplotlib
+matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import matplotlib.dates as mdates
 from matplotlib.lines import Line2D
@@ -212,11 +215,12 @@ def generate_catch_report(date: str,
                           station: str,
                           latitude: float,
                           longitude: float,
-                          water_temperature_at_catch: float,
+                          water_temperature_at_catch: float | None,
                           species: str,
                           fish_length: float,
                           water_turbidity: str,
                           photo_path: str | None = None,
+                          notes: str = "",
                           n_days_past: int = 3,
                           n_days_future: int = 1):
     # Datum im YYYY-MM-TT Format
@@ -272,21 +276,30 @@ def generate_catch_report(date: str,
     # 2. DATENABRUF (Wetter & Pegel)
     # ==========================================
     # Wetterdaten abrufen
-    weather_url = "https://api.open-meteo.com/v1/forecast"
+    weather_url = "https://archive-api.open-meteo.com/v1/era5"
     weather_params = {
         "latitude": latitude,
         "longitude": longitude,
         "start_date": start_date,
         "end_date": end_date,
-        "hourly": "temperature_2m,surface_pressure,wind_speed_10m,wind_direction_10m,weather_code",
+        "hourly": (
+            "temperature_2m,"
+            "surface_pressure,"
+            "wind_speed_10m,"
+            "wind_direction_10m,"
+            "weather_code,"
+            "precipitation,"
+            "cloud_cover"
+        ),
         "timezone": "Europe/Berlin"
     }
 
     # Pegeldaten abrufen (Vollständige URL über die funktionierende API)
     pegel_start = start.isoformat()
     pegel_url = f"https://www.pegelonline.wsv.de/webservices/rest-api/v2/stations/{station_number}/W/measurements.json"
+    water_temperature_url = f"https://www.pegelonline.wsv.de/webservices/rest-api/v2/stations/{station_number}/WT/measurements.json"
 
-    def lade_json(url, params=None, description="Daten"):
+    def load_json(url, params=None, description="Daten"):
         try:
             response = requests.get(
                 url,
@@ -314,7 +327,7 @@ def generate_catch_report(date: str,
     # 2a. Wetter abrufen & verarbeiten
     try:
         print("[1/2] Rufe Wetterdaten von Open-Meteo ab...")
-        weather_json = lade_json(weather_url, weather_params, "Wetterdaten")
+        weather_json = load_json(weather_url, weather_params, "Wetterdaten")
 
         if "hourly" not in weather_json:
             raise RuntimeError(f"Wetterdaten enthalten keinen 'hourly'-Block: {weather_json}")
@@ -327,7 +340,9 @@ def generate_catch_report(date: str,
             "Luftdruck": weather_res["surface_pressure"],
             "Wind": weather_res["wind_speed_10m"],
             "Windrichtung": weather_res["wind_direction_10m"],
-            "Wettercode": weather_res["weather_code"]
+            "Wettercode": weather_res["weather_code"],
+            "Regen": weather_res["precipitation"],
+            "Wolkenbedeckung": weather_res["cloud_cover"]
         }).set_index("Zeit")
 
 
@@ -342,7 +357,7 @@ def generate_catch_report(date: str,
 
         # 2b. Pegel abrufen & verarbeiten
         print(f"[2/2] Rufe Pegeldaten für Station {station.title()} ab...")
-        water_level_res = lade_json(pegel_url, {"start": pegel_start}, "Pegeldaten")
+        water_level_res = load_json(pegel_url, {"start": pegel_start}, "Pegeldaten")
 
         df_water_level = pd.DataFrame({
             "Zeit": pd.to_datetime([eintrag["timestamp"] for eintrag in water_level_res]),
@@ -350,6 +365,35 @@ def generate_catch_report(date: str,
         }).set_index("Zeit")
         df_water_level.index = remove_timezone(df_water_level.index)
         df_water_level = df_water_level.loc[(df_water_level.index >= plot_start) & (df_water_level.index <= plot_end)]
+
+        if water_temperature_at_catch is None:
+            try:
+                print(
+                    f"     Keine Wassertemperatur eingegeben. Rufe Wassertemperatur für Station {station.title()} ab...")
+                water_temperature_res = load_json(
+                    water_temperature_url,
+                    {"start": pegel_start},
+                    "Wassertemperaturdaten"
+                )
+
+                df_water_temperature = pd.DataFrame({
+                    "Zeit": pd.to_datetime([eintrag["timestamp"] for eintrag in water_temperature_res]),
+                    "Wassertemperatur": [eintrag["value"] for eintrag in water_temperature_res]
+                }).set_index("Zeit")
+                df_water_temperature.index = remove_timezone(df_water_temperature.index)
+                df_water_temperature = df_water_temperature.loc[
+                    (df_water_temperature.index >= plot_start)
+                    & (df_water_temperature.index <= plot_end)
+                    ]
+
+                water_temperature_at_catch = get_nearest_value(
+                    df_water_temperature,
+                    catch_datetime,
+                    "Wassertemperatur"
+                )
+
+            except Exception as e:
+                print(f"     Keine Wassertemperaturdaten über PEGELONLINE verfügbar: {e}")
 
         air_temperature_at_catch = get_nearest_value(df_weather, catch_datetime, "Temperatur")
         air_pressure_at_catch = get_nearest_value(df_weather, catch_datetime, "Luftdruck")
@@ -380,7 +424,7 @@ def generate_catch_report(date: str,
             "Wind": format_value(wind_speed_at_catch, "km/h", 0),
             "Pegelstelle": station.title(),
             "Wasserstand": format_value(water_level_at_catch, "cm", 0),
-            "Wassertrübung": water_turbidity,
+            "Trübung": water_turbidity,
         }
 
         def slope_of_trend(df, keyword, timeframe_m: int = 360):
@@ -416,7 +460,7 @@ def generate_catch_report(date: str,
                         air_temperature_slope
                     ),
                     "threshold": (
-                        0.05
+                        0.03
                     )
                 }
             ),
@@ -434,7 +478,7 @@ def generate_catch_report(date: str,
                         water_slope
                     ),
                     "threshold": (
-                        0.5
+                        0.1
                     )
                 }
             ),
@@ -460,14 +504,14 @@ def generate_catch_report(date: str,
                         air_pressure_slope
                     ),
                     "threshold": (
-                        1
+                        0.1
                     )
                 }
             ),
 
             MetricTile(
-                "Wassertrübung",
-                report_data.get("Wassertrübung", "Keine Daten")
+                "Trübung",
+                report_data.get("Trübung", "Keine Daten")
             ),
         ]
 
@@ -482,12 +526,48 @@ def generate_catch_report(date: str,
     # 3. GRAFISCHE VISUALISIERUNG (Matplotlib)
     # ==========================================
     # Erstelle zwei Subplots untereinander mit geteilter X-Achse
-    fig, (ax1, ax3) = plt.subplots(2, 1, figsize=(12, 8), sharex=True)
+    fig, (ax1, ax_rain, ax3) = plt.subplots(
+        3,
+        1,
+        figsize=(12, 9),
+        sharex=True,
+        gridspec_kw={
+            "height_ratios": [2.2, 1.0, 1.8],
+            "hspace": 0.18
+        }
+    )
     fig.suptitle(
         f"Wetter- und Pegelverlauf: {start_date} - {end_date}",
         fontsize=14,
         fontweight='bold'
     )
+
+    # Hilfsfunktion: Wolkenbedeckung im Regenplot als Hintergrund darstellen.
+    # 0 % = hellblau, 100 % = grau.
+    def draw_cloud_cover_background(axis):
+        if "Wolkenbedeckung" not in df_weather.columns or df_weather.empty:
+            return
+
+        cloud_data = df_weather["Wolkenbedeckung"].fillna(0).clip(0, 100)
+
+        clear_sky_color = np.array([0.78, 0.90, 1.00])  # hellblau
+        cloudy_color = np.array([0.62, 0.62, 0.62])  # grau
+
+        for timestamp, cloud_cover in cloud_data.items():
+            cloud_fraction = cloud_cover / 100
+            background_color = (
+                    clear_sky_color * (1 - cloud_fraction)
+                    + cloudy_color * cloud_fraction
+            )
+
+            axis.axvspan(
+                timestamp,
+                timestamp + timedelta(hours=1),
+                color=background_color,
+                alpha=0.45,
+                linewidth=0,
+                zorder=0
+            )
 
     # --- DIAGRAMM 1: WETTER (Temperatur & Luftdruck & Wind) ---
     color_temp = '#e74c3c'
@@ -620,7 +700,72 @@ def generate_catch_report(date: str,
         pad=10
     )
 
-    # --- DIAGRAMM 2: WASSERSTAND ---
+    # --- DIAGRAMM 2: REGEN & WOLKENBEDECKUNG ---
+    draw_cloud_cover_background(ax_rain)
+
+    color_rain = "#3498db"
+    ax_rain.bar(
+        df_weather.index,
+        df_weather["Regen"],
+        width=0.035,
+        align="edge",
+        color=color_rain,
+        edgecolor=color_rain,
+        alpha=0.85,
+        label="Regen (mm/h)",
+        zorder=2
+    )
+    ax_rain.set_ylabel("Regen\n(mm/h)", color=color_rain, fontweight="bold")
+    ax_rain.tick_params(axis="y", labelcolor=color_rain)
+    ax_rain.grid(True, linestyle=":", alpha=0.6, zorder=1)
+
+    max_rain = df_weather["Regen"].max()
+    if pd.isna(max_rain) or max_rain <= 0:
+        ax_rain.set_ylim(0, 1)
+    else:
+        ax_rain.set_ylim(0, max_rain * 1.25)
+
+    ax_rain.axvspan(
+        catchtime_start,
+        catchtime_ende,
+        color='gold',
+        alpha=0.18,
+        zorder=3
+    )
+
+    if plot_start <= forecast_start <= plot_end:
+        ax_rain.axvspan(
+            forecast_start,
+            plot_end,
+            color='gray',
+            alpha=0.12,
+            hatch='//',
+            zorder=3
+        )
+
+    cloud_cover_handle = Line2D(
+        [],
+        [],
+        color="#9ea7ad",
+        linewidth=8,
+        alpha=0.45,
+        label="Wolkenbedeckung: hellblau → grau"
+    )
+
+    rain_handles, rain_labels = ax_rain.get_legend_handles_labels()
+    ax_rain.legend(
+        rain_handles + [cloud_cover_handle],
+        rain_labels + ["Wolkenbedeckung: hellblau → grau"],
+        loc="upper left"
+    )
+    ax_rain.set_title(
+        "Niederschlag und Wolkenbedeckung",
+        fontsize=11,
+        loc="left",
+        pad=10
+    )
+
+    # --- DIAGRAMM 3: WASSERSTAND ---
     color_pegel = '#2980b9'
     ax3.plot(
         df_water_level.index, df_water_level['Wasserstand'],
@@ -664,15 +809,26 @@ def generate_catch_report(date: str,
     plt.xticks(rotation=0)
 
     # Layout optimieren und Diagramm anzeigen
-    plt.tight_layout(rect=(0, 0, 1, 0.95))
+    fig.subplots_adjust(
+        left=0.08,
+        right=0.92,
+        bottom=0.10,
+        top=0.90,
+        hspace=0.25
+    )
 
-    pdf_path = f"fang_report_{date}_{station.lower().replace(' ', '_')}.pdf"
+    report_location = "./Fänge"
+    if not os.path.exists(report_location):
+        os.makedirs(report_location)
+
+    pdf_path = f"{report_location}/fang_report_{date}_{station.lower().replace(' ', '_')}.pdf"
     create_pdf_report(
         pdf_path=pdf_path,
         plot_figure=fig,
         report_data=report_data,
         summary_items=summary_items,
-        photo_path=photo_path
+        photo_path=photo_path,
+        notes = notes
     )
 
     print(f"-> PDF wurde erstellt: {pdf_path}")
@@ -684,7 +840,8 @@ def create_pdf_report(
     plot_figure,
     report_data,
     summary_items,
-    photo_path=None
+    photo_path=None,
+    notes=""
 ):
 
     PAGE_TOP = 0.95
@@ -815,23 +972,26 @@ def create_pdf_report(
             spine.set_edgecolor("#d8dee6")
             spine.set_linewidth(1)
 
-        for y_position in np.linspace(0.88, 0.12, 10):
-            notes_axis.axhline(
-                y_position,
-                xmin=0.05,
-                xmax=0.95,
-                color="#d1d5db",
-                linewidth=0.8
+        if notes.strip():
+            notes_axis.text(
+                0.05,
+                0.92,
+                notes.strip(),
+                fontsize=9,
+                color="#111827",
+                va="top",
+                wrap=True,
+                transform=notes_axis.transAxes
             )
-
-        notes_axis.text(
-            0.05,
-            0.94,
-            "Beobachtungen, Köder, Strömung, Bisse ...",
-            fontsize=8,
-            color="#9ca3af",
-            transform=notes_axis.transAxes
-        )
+        else:
+            notes_axis.text(
+                0.05,
+                0.94,
+                "Beobachtungen, Köder, Strömung, Bisse ...",
+                fontsize=8,
+                color="#9ca3af",
+                transform=notes_axis.transAxes
+            )
 
         # Freie Fläche für Skizze unterhalb der Fangdaten
         sketch_axis = report_figure.add_axes((0.06, content_y, 0.42, content_height))
@@ -906,8 +1066,15 @@ def create_pdf_report(
         plt.close(report_figure)
 
         plot_figure.set_size_inches(11.69, 8.27)
-        plot_figure.tight_layout(rect=(0, 0, 1, 0.95))
+        plot_figure.subplots_adjust(
+            left=0.08,
+            right=0.92,
+            bottom=0.10,
+            top=0.90,
+            hspace=0.25
+        )
         pdf.savefig(plot_figure)
+        plt.close(plot_figure)
 
 
 if __name__ == "__main__":
@@ -951,17 +1118,24 @@ if __name__ == "__main__":
     parser.add_argument(
         "--Wassertemperatur",
         type=float,
-        help="Wassertemperatur in Grad Celsius"
+        help="Wassertemperatur in Grad Celsius. Wenn nicht angegeben, wird versucht, sie über PEGELONLINE abzurufen."
     )
     parser.add_argument(
-        "--Wassertrübung",
+        "--Trübung",
         type=str,
-        help="Beschreibung der Wassertrübung, z. B. 'klar' oder 'leicht eingetrübt'"
+        help="Beschreibung der Trübung, z. B. 'klar' oder 'leicht eingetrübt'",
+        default="Keine Daten"
     )
     parser.add_argument(
         "--Fotopfad",
         type=str,
         help="Speicherort des Fangfotos"
+    )
+    parser.add_argument(
+        "--Notizen",
+        type=str,
+        help="Notizen für den Fangreport",
+        default=""
     )
     args = parser.parse_args()
 
@@ -973,20 +1147,26 @@ if __name__ == "__main__":
     species = args.Fischart
     fish_length = args.Länge
     water_temperature = args.Wassertemperatur
-    water_turbidity = args.Wassertrübung
+    water_turbidity = args.Trübung
     photo_path = args.Fotopfad
-
-    if not -90 <= latitude <= 90:
-        raise ValueError(
-            f"Ungültiger Breitengrad: {latitude}. Erwartet wird ein Wert zwischen -90 und 90."
-        )
-
-    if not -180 <= longitude <= 180:
-        raise ValueError(
-            f"Ungültiger Längengrad: {longitude}. Erwartet wird ein Wert zwischen -180 und 180."
-        )
+    notes = args.Notizen
 
     try:
+        if datetime.now() < datetime(int(date[:4]), int(date[5:7]), int(date[8:]), int(catchtime[:2]),
+                                     int(catchtime[3:5])):
+            raise ValueError(
+                f"Das Fangdatum liegt in der Zukunft."
+            )
+        if not -90 <= latitude <= 90:
+            raise ValueError(
+                f"Ungültiger Breitengrad: {latitude}. Erwartet wird ein Wert zwischen -90 und 90."
+            )
+
+        if not -180 <= longitude <= 180:
+            raise ValueError(
+                f"Ungültiger Längengrad: {longitude}. Erwartet wird ein Wert zwischen -180 und 180."
+            )
+
         generate_catch_report(
             date,
             catchtime,
@@ -997,7 +1177,8 @@ if __name__ == "__main__":
             species,
             fish_length,
             water_turbidity,
-            photo_path
+            photo_path,
+            notes
         )
     except ValueError as e:
         print(f"❌ Eingabefehler: {e}")
