@@ -63,3 +63,16 @@ sind mit einem Stern (*) markiert.
 
 Fangreporte können bis zu 30 Tage rückwirkend erstellt werden. Eine Liste aller Pegelstellen findet sich auf 
 der [Pegelonline-Webseite](https://pegelonline.wsv.de/gast/start).
+
+Zusätzlich unterstützt Fangreport erste Pegelstationen am Po und am Mincio in Italien. Unterstützte Eingaben sind:
+
+* Po Cremona
+* Po Casalmaggiore
+* Po Boretto
+* Po Borgoforte
+* Mincio Goito
+* Mincio Mantova
+* Mincio Peschiera del Garda
+
+Bei italienischen Stationen versucht Fangreport, Pegeldaten automatisch über die jeweilige regionale Datenquelle abzurufen.
+Wenn für die Station keine Wassertemperatur verfügbar ist, kann die Wassertemperatur weiterhin manuell angegeben werden.

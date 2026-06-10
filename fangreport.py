@@ -1,18 +1,23 @@
 import os
 import argparse
-
+import unicodedata
+import json
 import requests
 import pandas as pd
+
 import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import matplotlib.dates as mdates
 from matplotlib.lines import Line2D
 from matplotlib.backends.backend_pdf import PdfPages
+
 import numpy as np
 import scipy.stats as stats
 from datetime import datetime, timedelta
 from PIL import Image
+
+from clients import AipoClient
 
 
 def describe_weather_code(code):
@@ -91,6 +96,130 @@ def format_value(value, unit="", decimals=1):
         return value
 
     return f"{value:.{decimals}f} {unit}".strip()
+
+
+def normalize_station_name(value):
+    value = value.strip().lower()
+    value = unicodedata.normalize("NFKD", value)
+    value = "".join(char for char in value if not unicodedata.combining(char))
+    return " ".join(value.replace("-", " ").replace("_", " ").split())
+
+
+def italian_stations_dict():
+    stations = {}
+
+    with open("clients/italian_stations.json", "r", encoding="utf-8") as f:
+        italian_stations = json.load(f)
+
+    for canonical_name, station_data in italian_stations.items():
+        stations[normalize_station_name(canonical_name)] = station_data
+
+        for alias in station_data.get("aliases", []):
+            stations[normalize_station_name(alias)] = station_data
+
+    return stations
+
+
+def find_italian_station(station):
+    return italian_stations_dict().get(normalize_station_name(station))
+
+
+def load_arpa_lombardia_sensor_values(sensor_id, start, end):
+    url = "https://www.dati.lombardia.it/resource/647i-nhxk.json"
+    params = {
+        "$limit": 50000,
+        "$order": "data ASC",
+        "idsensore": str(sensor_id),
+        "$where": (
+            f"data between '{start.strftime('%Y-%m-%dT%H:%M:%S')}' "
+            f"and '{end.strftime('%Y-%m-%dT%H:%M:%S')}'"
+        ),
+    }
+
+    response = requests.get(url, params=params, timeout=20)
+    response.raise_for_status()
+    raw_data = response.json()
+
+    if not raw_data:
+        return pd.DataFrame(columns=["Zeit", "Wert"]).set_index("Zeit")
+
+    data_frame = pd.DataFrame(raw_data)
+
+    if "data" not in data_frame.columns or "valore" not in data_frame.columns:
+        raise ValueError(
+            "Die ARPA-Lombardia-Daten enthalten nicht die erwarteten Spalten "
+            "'data' und 'valore'."
+        )
+
+    data_frame = data_frame.rename(
+        columns={
+            "data": "Zeit",
+            "valore": "Wert",
+        }
+    )
+
+    data_frame["Zeit"] = pd.to_datetime(data_frame["Zeit"], errors="coerce")
+    data_frame["Wert"] = pd.to_numeric(data_frame["Wert"], errors="coerce")
+    data_frame = data_frame.dropna(subset=["Zeit", "Wert"])
+    data_frame = data_frame.set_index("Zeit").sort_index()
+
+    if data_frame.index.tz is not None:
+        data_frame.index = data_frame.index.tz_convert("Europe/Rome").tz_localize(None)
+
+    return data_frame
+
+
+def load_italian_station_data(station, start, end, catch_datetime, water_temperature_at_catch):
+    station_data = find_italian_station(station)
+
+    if station_data is None:
+        return None
+
+    if station_data["provider"] != "arpa_lombardia" and station_data["provider"] != "aipo":
+        raise ValueError(
+            f"Die Station '{station_data['display_name']}' ist bereits angelegt, "
+            "aber die automatische Datenabfrage für diese regionale Quelle ist noch nicht konfiguriert."
+        )
+
+    level_sensor_id = station_data.get("level_sensor_id")
+
+    if level_sensor_id is None:
+        raise ValueError(
+            f"Für die italienische Station '{station_data['display_name']}' "
+            "wurde kein Pegelsensor gefunden."
+        )
+
+    if station_data["provider"] == "arpa_lombardia":
+        source = "ARPA Lombardia"
+        df_water_level_raw = load_arpa_lombardia_sensor_values(
+            level_sensor_id,
+            start,
+            end + timedelta(days=1)
+        )
+    else:
+        source = "AIPO"
+        client = AipoClient.from_file("./clients/aipo_auth.json")
+        df_water_level_raw = client.load_sensor_values(
+            level_sensor_id,
+            start,
+            end + timedelta(days=1)
+        )
+
+    if df_water_level_raw.empty:
+        raise ValueError(
+            f"Für die italienische Station '{station_data['display_name']}' "
+            f"wurden im gewählten Zeitraum keine Pegeldaten für Sensor {level_sensor_id} gefunden."
+        )
+
+    df_water_level = df_water_level_raw.rename(columns={"Wert": "Wasserstand"})
+
+    return {
+        "station_display_name": station_data["display_name"],
+        "water": station_data["water"],
+        "df_water_level": df_water_level,
+        "water_temperature_at_catch": water_temperature_at_catch,
+        "source": source,
+    }
 
 
 def pegelonline_stations_dict():
@@ -223,21 +352,7 @@ def generate_catch_report(date: str,
                           notes: str = "",
                           n_days_past: int = 3,
                           n_days_future: int = 1):
-    # Datum im YYYY-MM-TT Format
-    stations_dict = pegelonline_stations_dict()
-
-    station_data = stations_dict.get(station.upper())
-    if station_data is None:
-        raise ValueError(
-            f"Ungültige Pegelstelle: '{station}'. "
-            "Bitte gib eine gültige Pegelstelle an."
-        )
-
     # 1. KONFIGURATION
-    
-    # Verifizierte Pegelstation
-    station_number = station_data["stationsnummer"]
-    water = station_data["gewaesser"]
 
     # Zeitraum um das Fangdatum herum
     today = datetime.now()
@@ -254,7 +369,7 @@ def generate_catch_report(date: str,
         end = catch_date + timedelta(days=n_days_future)
     else:
         end = catch_date
-        
+
     plot_start = start
     plot_end = end + timedelta(days=1)
     forecast_start = today
@@ -269,8 +384,42 @@ def generate_catch_report(date: str,
             f"Ungültige Fangzeit: '{time_of_catch}'. Erwartetes Format: HH:MM, z. B. 18:30."
         ) from e
 
+    italian_station_result = load_italian_station_data(
+        station,
+        start,
+        end,
+        catch_datetime,
+        water_temperature_at_catch
+    )
+
+    station_number = None
+    pegel_url = None
+    water_temperature_url = None
+
+    if italian_station_result is None:
+        stations_dict = pegelonline_stations_dict()
+
+        station_data = stations_dict.get(station.upper())
+        if station_data is None:
+            raise ValueError(
+                f"Ungültige Pegelstelle: '{station}'. "
+                "Bitte gib eine gültige PEGELONLINE-Pegelstelle oder eine unterstützte italienische Station an."
+            )
+
+        # Verifizierte PEGELONLINE-Pegelstation
+        station_number = station_data["stationsnummer"]
+        water = station_data["gewaesser"]
+        station_display_name = station.title()
+        station_source = "PEGELONLINE"
+    else:
+        water = italian_station_result["water"]
+        station_display_name = italian_station_result["station_display_name"]
+        station_source = italian_station_result["source"]
+        water_temperature_at_catch = italian_station_result["water_temperature_at_catch"]
+
     print(f"--- GENERIERE GRAFISCHEN ANGEL-REPORT ---")
-    print(f"Zeitraum: {start_date} bis {end_date}\n")
+    print(f"Zeitraum: {start_date} bis {end_date}")
+    print(f"Pegelquelle: {station_source}\n")
 
     # ==========================================
     # 2. DATENABRUF (Wetter & Pegel)
@@ -294,10 +443,11 @@ def generate_catch_report(date: str,
         "timezone": "Europe/Berlin"
     }
 
-    # Pegeldaten abrufen (Vollständige URL über die funktionierende API)
+    # Pegeldaten abrufen
     pegel_start = start.isoformat()
-    pegel_url = f"https://www.pegelonline.wsv.de/webservices/rest-api/v2/stations/{station_number}/W/measurements.json"
-    water_temperature_url = f"https://www.pegelonline.wsv.de/webservices/rest-api/v2/stations/{station_number}/WT/measurements.json"
+    if italian_station_result is None:
+        pegel_url = f"https://www.pegelonline.wsv.de/webservices/rest-api/v2/stations/{station_number}/W/measurements.json"
+        water_temperature_url = f"https://www.pegelonline.wsv.de/webservices/rest-api/v2/stations/{station_number}/WT/measurements.json"
 
     def load_json(url, params=None, description="Daten"):
         try:
@@ -322,7 +472,6 @@ def generate_catch_report(date: str,
             raise RuntimeError(f"{description}: Netzwerk- oder HTTP-Fehler: {e}") from e
         except ValueError as e:
             raise RuntimeError(f"{description}: Ungültige JSON-Antwort: {e}") from e
-
 
     # 2a. Wetter abrufen & verarbeiten
     try:
@@ -356,44 +505,52 @@ def generate_catch_report(date: str,
         df_weather = df_weather.loc[(df_weather.index >= plot_start) & (df_weather.index <= plot_end)]
 
         # 2b. Pegel abrufen & verarbeiten
-        print(f"[2/2] Rufe Pegeldaten für Station {station.title()} ab...")
-        water_level_res = load_json(pegel_url, {"start": pegel_start}, "Pegeldaten")
+        print(f"[2/2] Rufe Pegeldaten für Station {station_display_name} ab...")
 
-        df_water_level = pd.DataFrame({
-            "Zeit": pd.to_datetime([eintrag["timestamp"] for eintrag in water_level_res]),
-            "Wasserstand": [eintrag["value"] for eintrag in water_level_res]
-        }).set_index("Zeit")
-        df_water_level.index = remove_timezone(df_water_level.index)
-        df_water_level = df_water_level.loc[(df_water_level.index >= plot_start) & (df_water_level.index <= plot_end)]
+        if italian_station_result is None:
+            water_level_res = load_json(pegel_url, {"start": pegel_start}, "Pegeldaten")
 
-        if water_temperature_at_catch is None:
-            try:
-                print(
-                    f"     Keine Wassertemperatur eingegeben. Rufe Wassertemperatur für Station {station.title()} ab...")
-                water_temperature_res = load_json(
-                    water_temperature_url,
-                    {"start": pegel_start},
-                    "Wassertemperaturdaten"
-                )
+            df_water_level = pd.DataFrame({
+                "Zeit": pd.to_datetime([eintrag["timestamp"] for eintrag in water_level_res]),
+                "Wasserstand": [eintrag["value"] for eintrag in water_level_res]
+            }).set_index("Zeit")
+            df_water_level.index = remove_timezone(df_water_level.index)
+            df_water_level = df_water_level.loc[(df_water_level.index >= plot_start) & (df_water_level.index <= plot_end)]
 
-                df_water_temperature = pd.DataFrame({
-                    "Zeit": pd.to_datetime([eintrag["timestamp"] for eintrag in water_temperature_res]),
-                    "Wassertemperatur": [eintrag["value"] for eintrag in water_temperature_res]
-                }).set_index("Zeit")
-                df_water_temperature.index = remove_timezone(df_water_temperature.index)
-                df_water_temperature = df_water_temperature.loc[
-                    (df_water_temperature.index >= plot_start)
-                    & (df_water_temperature.index <= plot_end)
-                    ]
+            if water_temperature_at_catch is None:
+                try:
+                    print(
+                        f"     Keine Wassertemperatur eingegeben. Rufe Wassertemperatur für Station {station_display_name} ab...")
+                    water_temperature_res = load_json(
+                        water_temperature_url,
+                        {"start": pegel_start},
+                        "Wassertemperaturdaten"
+                    )
 
-                water_temperature_at_catch = get_nearest_value(
-                    df_water_temperature,
-                    catch_datetime,
-                    "Wassertemperatur"
-                )
+                    df_water_temperature = pd.DataFrame({
+                        "Zeit": pd.to_datetime([eintrag["timestamp"] for eintrag in water_temperature_res]),
+                        "Wassertemperatur": [eintrag["value"] for eintrag in water_temperature_res]
+                    }).set_index("Zeit")
+                    df_water_temperature.index = remove_timezone(df_water_temperature.index)
+                    df_water_temperature = df_water_temperature.loc[
+                        (df_water_temperature.index >= plot_start)
+                        & (df_water_temperature.index <= plot_end)
+                        ]
 
-            except Exception as e:
-                print(f"     Keine Wassertemperaturdaten über PEGELONLINE verfügbar: {e}")
+                    water_temperature_at_catch = get_nearest_value(
+                        df_water_temperature,
+                        catch_datetime,
+                        "Wassertemperatur"
+                    )
+
+                except Exception as e:
+                    print(f"     Keine Wassertemperaturdaten über PEGELONLINE verfügbar: {e}")
+        else:
+            df_water_level = italian_station_result["df_water_level"]
+            df_water_level = df_water_level.loc[
+                (df_water_level.index >= plot_start)
+                & (df_water_level.index <= plot_end)
+            ]
 
         air_temperature_at_catch = get_nearest_value(df_weather, catch_datetime, "Temperatur")
         air_pressure_at_catch = get_nearest_value(df_weather, catch_datetime, "Luftdruck")
@@ -422,7 +579,7 @@ def generate_catch_report(date: str,
             "Wassertemperatur": format_value(water_temperature_at_catch, "°C"),
             "Luftdruck": format_value(air_pressure_at_catch, "hPa", 0),
             "Wind": format_value(wind_speed_at_catch, "km/h", 0),
-            "Pegelstelle": station.title(),
+            "Pegelstelle": station_display_name,
             "Wasserstand": format_value(water_level_at_catch, "cm", 0),
             "Trübung": water_turbidity,
         }
@@ -471,7 +628,7 @@ def generate_catch_report(date: str,
             ),
 
             MetricTile(
-                f"Pegel ({station})",
+                f"Pegel ({station_display_name})",
                 report_data.get("Wasserstand", "Keine Daten"),
                 meta={
                     "trend": (
@@ -771,7 +928,7 @@ def generate_catch_report(date: str,
         df_water_level.index, df_water_level['Wasserstand'],
         color=color_pegel,
         linewidth=2.5,
-        label=f'Pegel {station.title()} (cm)'
+        label=f'Pegel {station_display_name} (cm)'
     )
     ax3.set_ylabel('Wasserstand (cm)', color=color_pegel, fontweight='bold')
     ax3.tick_params(axis='y', labelcolor=color_pegel)
@@ -794,7 +951,7 @@ def generate_catch_report(date: str,
         )
 
     ax3.set_title(
-        f"{water}-Pegel {station.title()}",
+        f"{water}-Pegel {station_display_name}",
         fontsize=11,
         loc='left',
         pad=10
@@ -821,7 +978,7 @@ def generate_catch_report(date: str,
     if not os.path.exists(report_location):
         os.makedirs(report_location)
 
-    pdf_path = f"{report_location}/fang_report_{date}_{station.lower().replace(' ', '_')}.pdf"
+    pdf_path = f"{report_location}/fang_report_{date}_{station_display_name.lower().replace(' ', '_')}.pdf"
     create_pdf_report(
         pdf_path=pdf_path,
         plot_figure=fig,

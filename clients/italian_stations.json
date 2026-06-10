@@ -1,0 +1,126 @@
+{
+  "po cremona": {
+    "display_name": "Cremona",
+    "river": "Po",
+    "water": "Po",
+    "latitude": 45.128888,
+    "longitude": 9.995277,
+    "provider": "arpa_lombardia",
+    "level_sensor_id": 8158,
+    "station_keywords": ["cremona", "gerre borghi"],
+    "level_sensor_type": "Livello Idrometrico",
+    "aliases": ["cremona"]
+  },
+  "po borgoforte": {
+    "display_name": "Borgoforte",
+    "river": "Po",
+    "water": "Po",
+    "latitude": 45.046111,
+    "longitude": 10.755833,
+    "provider": "arpa_lombardia",
+    "level_sensor_id": 8101,
+    "station_keywords": ["borgoforte", "moteggiana", "suzzara", "san benedetto po"],
+    "level_sensor_type": "Livello Idrometrico",
+    "aliases": ["borgoforte"]
+  },
+  "po sermide e felonica": {
+    "display_name": "Sermide e Felonica",
+    "river": "Po",
+    "water": "Po",
+    "latitude": 45.015000,
+    "longitude": 11.290000,
+    "provider": "arpa_lombardia",
+    "level_sensor_id": 8154,
+    "station_keywords": ["sermide", "felonica", "castelmassa"],
+    "level_sensor_type": "Livello Idrometrico",
+    "aliases": ["sermide", "felonica", "sermide e felonica", "castelmassa"]
+    },
+  "mincio peschiera del garda": {
+    "display_name": "Peschiera del Garda",
+    "river": "Mincio",
+    "water": "Mincio",
+    "latitude": 45.440277,
+    "longitude": 10.698333,
+    "provider": "aipo",
+    "level_sensor_id": 51514,
+    "station_keywords": ["peschiera del garda"],
+    "aliases": ["peschiera del garda", "peschiera"]
+    },
+  "mincio monzambano": {
+    "display_name": "Monzambano",
+    "river": "Mincio",
+    "water": "Mincio",
+    "latitude": 45.392777,
+    "longitude": 10.706111,
+    "provider": "arpa_lombardia",
+    "level_sensor_id": 8384,
+    "station_keywords": ["Ponti sul Mincio"],
+    "aliases": ["monzambano", "ponti sul mincio monzambano", "salionze"]
+    },
+  "mincio goito": {
+    "display_name": "Goito UP",
+    "river": "Mincio",
+    "water": "Mincio",
+    "latitude": 45.223888,
+    "longitude": 10.677500,
+    "provider": "aipo",
+    "level_sensor_id": 43397,
+    "station_keywords": ["Casale di Goito", "Idrometro Pressione Valle", "Sacca"],
+    "aliases": ["goito"]
+    },
+  "mincio lago superiore": {
+    "display_name": "Lago Superiore",
+    "river": "Mincio",
+    "water": "Mincio",
+    "latitude": 45.168611,
+    "longitude": 10.789722,
+    "provider": "aipo",
+    "level_sensor_id": 43400,
+    "station_keywords": ["Lago Superiore", "Vasarone"],
+    "aliases": ["lago superiore"]
+    },
+  "mincio lago di mezzo": {
+    "display_name": "Lago di Mezzo",
+    "river": "Mincio",
+    "water": "Mincio",
+    "latitude": 45.168611,
+    "longitude": 10.789722,
+    "provider": "aipo",
+    "level_sensor_id": 43402,
+    "station_keywords": ["Lago di Mezzo", "Vasarone"],
+    "aliases": ["lago di mezzo"]
+    },
+  "mincio vallazza": {
+    "display_name": "Vallazza",
+    "river": "Mincio",
+    "water": "Mincio",
+    "latitude": 45.129722,
+    "longitude": 10.843611,
+    "provider": "aipo",
+    "level_sensor_id": 43408,
+    "station_keywords": ["Riserva Regionale Vallazza", "Formigosa"],
+    "aliases": ["vallazza"]
+    },
+  "mincio governolo": {
+    "display_name": "Governolo UP",
+    "river": "Mincio",
+    "water": "Mincio",
+    "latitude": 45.084722,
+    "longitude": 10.953611,
+    "provider": "aipo",
+    "level_sensor_id": 43412,
+    "station_keywords": ["Idrometro Pressione Valle"],
+    "aliases": ["governolo"]
+    },
+    "oglio marcaria": {
+      "display_name": "Marcaria",
+      "river": "Oglio",
+      "water": "Oglio",
+      "latitude": 45.114166,
+      "longitude": 10.531666,
+      "provider": "arpa_lombardia",
+      "level_sensor_id": 18270,
+      "station_keywords": ["argine oglio", "parco oglio sud"],
+      "aliases": ["marcaria", "marcaria argine oglio"]
+    }
+}
