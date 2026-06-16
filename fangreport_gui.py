@@ -10,7 +10,7 @@ class FangreportApp(tk.Tk):
     def __init__(self):
         super().__init__()
 
-        self.title("Fangreport erstellen")
+        self.title("Fangreport")
         self.geometry("720x820")
         self.minsize(680, 760)
 
@@ -34,7 +34,7 @@ class FangreportApp(tk.Tk):
 
         title_label = ttk.Label(
             main_frame,
-            text="Fangreport erstellen",
+            text="🎣 Fangreport erstellen",
             font=("TkDefaultFont", 18, "bold")
         )
         title_label.pack(anchor="w", pady=(0, 12))
@@ -45,13 +45,13 @@ class FangreportApp(tk.Tk):
         self.entries = {}
 
         fields = [
-            ("Datum", "YYYY-MM-DD", True),
-            ("Zeit", "HH:MM", True),
             ("Fischart", "z. B. Wels", True),
             ("Länge", "cm, z. B. 130", False),
-            ("Längengrad", "z. B. 52.477575", True),
-            ("Breitengrad", "z. B. 12.449408", True),
-            ("Messstation", "z. B. Tieckow", True),
+            ("Gewicht", "kg, z. B. 8.5", False),
+            ("Datum", "YYYY-MM-DD", True),
+            ("Zeit", "HH:MM", True),
+            ("Längen- und Breitengrad", "z. B. 49.357599616156776, 8.494281048199765", True),
+            ("Pegelstation", "z. B. Speyer", True),
             ("Wassertemperatur", "optional, °C", False),
             ("Trübung", "z. B. klar", False),
         ]
@@ -68,20 +68,20 @@ class FangreportApp(tk.Tk):
 
             entry = ttk.Entry(form_frame)
             entry.grid(row=row, column=1, sticky="ew", pady=5)
+
             entry.insert(0, placeholder)
             entry.configure(foreground="gray")
 
+            entry.placeholder = placeholder
+            entry.placeholder_active = True
+
             entry.bind(
                 "<FocusIn>",
-                lambda event, text=placeholder, is_required=required: self._clear_placeholder(
-                    event,
-                    text,
-                    is_required
-                )
+                self._clear_placeholder
             )
             entry.bind(
                 "<FocusOut>",
-                lambda event, text=placeholder: self._restore_placeholder(event, text)
+                self._restore_placeholder
             )
 
             self.entries[label] = {
@@ -94,11 +94,8 @@ class FangreportApp(tk.Tk):
 
         self.entries["Fischart"]["widget"].delete(0, tk.END)
         self.entries["Fischart"]["widget"].insert(0, "Wels")
-        self.entries["Fischart"]["widget"].configure(foreground="black")
-
-        self.entries["Trübung"]["widget"].delete(0, tk.END)
-        self.entries["Trübung"]["widget"].insert(0, "Keine Daten")
-        self.entries["Trübung"]["widget"].configure(foreground="black")
+        self.entries["Fischart"]["widget"].configure(foreground="white")
+        self.entries["Fischart"]["widget"].placeholder_active = False
 
         photo_frame = ttk.LabelFrame(main_frame, text="Foto", padding=12)
         photo_frame.pack(fill="x", pady=(0, 12))
@@ -120,7 +117,7 @@ class FangreportApp(tk.Tk):
             text="Entfernen",
             command=lambda: self.photo_path_var.set("")
         ).pack(side="left", padx=(8, 0))
-        notes_frame = ttk.LabelFrame(main_frame, text="Notizen", padding=12)
+        notes_frame = ttk.LabelFrame(main_frame, text="Notizen", padding=8)
         notes_frame.pack(fill="x", pady=(0, 12))
 
         self.notes_text = tk.Text(notes_frame, height=5, wrap="word")
@@ -162,24 +159,30 @@ class FangreportApp(tk.Tk):
         )
         close_button.grid(row=1, column=1, sticky="e")
 
-    def _clear_placeholder(self, event, placeholder, required):
+    @staticmethod
+    def _clear_placeholder(event):
         entry = event.widget
-        if required and entry.get() == placeholder and entry.cget("foreground") == "gray":
-            entry.delete(0, tk.END)
-            entry.configure(foreground="black")
 
-    def _restore_placeholder(self, event, placeholder):
+        if getattr(entry, "placeholder_active", False):
+            entry.delete(0, tk.END)
+            entry.configure(foreground="white")
+            entry.placeholder_active = False
+
+    @staticmethod
+    def _restore_placeholder(event):
         entry = event.widget
+
         if not entry.get().strip():
-            entry.insert(0, placeholder)
+            entry.insert(0, entry.placeholder)
             entry.configure(foreground="gray")
+            entry.placeholder_active = True
 
     def _get_entry_value(self, label):
         entry_data = self.entries[label]
         entry = entry_data["widget"]
         value = entry.get().strip()
 
-        if value == entry_data["placeholder"] and entry.cget("foreground") == "gray":
+        if entry.cget("foreground") == "gray":
             return ""
 
         return value
@@ -212,7 +215,7 @@ class FangreportApp(tk.Tk):
         date = self._get_entry_value("Datum")
         time_of_catch = self._get_entry_value("Zeit")
         species = self._get_entry_value("Fischart")
-        station = self._get_entry_value("Messstation")
+        station = self._get_entry_value("Pegelstation")
         water_turbidity = self._get_entry_value("Trübung") or "Keine Daten"
         photo_path = self.photo_path_var.get().strip() or None
         notes = self.notes_text.get("1.0", tk.END).strip()
@@ -228,14 +231,19 @@ class FangreportApp(tk.Tk):
             raise ValueError("Die Zeit muss im Format HH:MM eingegeben werden.") from exc
 
         try:
-            latitude = float(self._get_entry_value("Längengrad").replace(",", "."))
-        except ValueError as exc:
-            raise ValueError("Der Längengrad muss eine Zahl sein.") from exc
+            c = self._get_entry_value("Längen- und Breitengrad").split(",")
 
-        try:
-            longitude = float(self._get_entry_value("Breitengrad").replace(",", "."))
+            if len(c) != 2:
+                raise ValueError("Es müssen genau zwei Werte angegeben werden.")
+
+            latitude = float(c[0].strip())
+            longitude = float(c[1].strip())
+
         except ValueError as exc:
-            raise ValueError("Der Breitengrad muss eine Zahl sein.") from exc
+            raise ValueError(
+                "Längen- und Breitengrad müssen zwei durch ein Komma getrennte Zahlen sein, "
+                "deren Nachkommastellen durch einen Punkt angezeigt werden."
+            ) from exc
 
         if not -90 <= latitude <= 90:
             raise ValueError("Der Breitengrad muss zwischen -90 und 90 liegen.")
@@ -245,15 +253,27 @@ class FangreportApp(tk.Tk):
 
         fish_length_text = self._get_entry_value("Länge")
         fish_length = None
-        if fish_length_text:
+        if not (fish_length_text is None or fish_length_text == "cm, z. B. 130"):
             try:
                 fish_length = float(fish_length_text.replace(",", "."))
             except ValueError as exc:
                 raise ValueError("Die Fischlänge muss eine Zahl sein.") from exc
 
+        fish_weight_text = self._get_entry_value("Gewicht")
+        fish_weight = None
+        if not (fish_weight_text is None or fish_weight_text == "kg, z. B. 8.5"):
+            try:
+                fish_weight = float(
+                    fish_weight_text.replace(",", ".")
+                )
+            except ValueError as exc:
+                raise ValueError(
+                    "Das Fischgewicht muss eine Zahl sein."
+                ) from exc
+
         water_temperature_text = self._get_entry_value("Wassertemperatur")
         water_temperature = None
-        if water_temperature_text:
+        if not (water_temperature_text is None or water_temperature_text == "optional, °C"):
             try:
                 water_temperature = float(water_temperature_text.replace(",", "."))
             except ValueError as exc:
@@ -272,6 +292,7 @@ class FangreportApp(tk.Tk):
             "water_temperature_at_catch": water_temperature,
             "species": species,
             "fish_length": fish_length,
+            "fish_weight": fish_weight,
             "water_turbidity": water_turbidity,
             "photo_path": photo_path,
             "notes": notes,
@@ -305,7 +326,7 @@ class FangreportApp(tk.Tk):
                 )
             )
         except Exception as exc:
-            self.after(0, lambda: self._report_failed(str(exc)))
+            self.after(0, lambda msg=str(exc): self._report_failed(msg))
         else:
             self.after(0, self._report_finished)
 

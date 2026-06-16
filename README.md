@@ -15,7 +15,7 @@ wenn es um das Festhalten von Erinnerungen geht, hilft *Fangreport* einfach und 
 
 Installieren Sie [git](https://git-scm.com) auf dem Computer. 
 
-Fangreport benötigt die folgenden Python-Pakete:
+Fangreport benötigt eine virtuelle Umgebung mit den folgenden Python-Paketen:
 * numpy,
 * pandas,
 * requests,
@@ -24,7 +24,7 @@ Fangreport benötigt die folgenden Python-Pakete:
 
 ### Repository
 
-Als Nächstes klonen Sie das Repository in einen lokalen Ordner mit dem Befehl:
+Klonen Sie das Repository in einen lokalen Ordner, indem sie diesen im Terminal öffnen und folgenden Befehl eingeben:
 
 ```
 git clone git@github.com:martinhanik/Fangbuch.git
@@ -38,20 +38,7 @@ cd Fangbuch
 
 ## Nutzung
 
-Mit dem folgenden Befehl lässt sich ein Fangreport in der Konsole erstellen:
-
-```
-python fangreport.py --Fischart Wels --Länge 130 --Datum 2026-05-22 --Zeit 20:00 --Längengrad 52.477575 --Breitengrad 12.449408 --Messstation Tieckow --Wassertemperatur 12.5 --Trübung klar --Fotopfad /Pfad/zum/Fangfoto
-```
-
-Hier wurde am 22.5.2026 um 20 Uhr ein Wels von 130 cm gefangen. Die Koordinaten des Fangorts (an der Havel) sind 
-(52.477575, 12.449408). Die Messstation, von der der Pegel abgefragt werden soll, ist Tieckow. Zum Zeitpunkt des Fangs 
-war das Wasser klar und hatte eine Temperatur von 12,5 Grad Celsius. Der Speicherort eines Fangfotos wird ebenfalls 
-angegeben. Länge, Wassertemperatur, Trübung und der Fotopfad sind optionale Parameter. Wenn keine Wassertemperatur 
-angegeben wird, versucht Fangreport, die Wassertemperatur automatisch über PEGELONLINE abzurufen. Die fertigen 
-Fangreporte werden im Ordner `Fänge` gespeichert.
-
-Die Erstellung eines Reports ist auch mithilfe einer GUI möglich. Sie lässt sich mit dem Befehl
+Die Erstellung eines Reports ist mithilfe einer GUI möglich. Sie lässt sich mit dem Befehl
 
 ```
 python fangreport.py 
@@ -60,19 +47,52 @@ python fangreport.py
 starten. Die GUI erlaubt es, alle relevanten Angaben zu einem Fang zu erfassen. Notwendige Angaben 
 sind mit einem Stern (*) markiert. 
 
+Mit dem folgenden Befehl lässt sich ein Fangreport in der Konsole erstellen:
+
+```
+python fangreport.py --Fischart Wels --Länge 130 --Gewicht 13 --Datum 2026-05-22 --Zeit 20:00 --Längengrad 49.357599616156776 --Breitengrad 8.494281048199765 --Pegelstation Speyer --Wassertemperatur 12.5 --Trübung klar --Fotopfad /Pfad/zum/Fangfoto
+```
+
+Hier wurde am 22.5.2026 um 20 Uhr ein Wels von 130 cm und 13 kg gefangen. Die Koordinaten des Fangorts (am Rhein) 
+sind (49.357599616156776, 8.494281048199765). Die Messstation, von der der Pegel abgefragt werden soll, ist Tieckow. Zum Zeitpunkt des 
+Fangs war das Wasser klar und hatte eine Temperatur von 12,5 Grad Celsius. Der Speicherort eines Fangfotos wird 
+ebenfalls angegeben. Länge, Wassertemperatur, Trübung und der Fotopfad sind optionale Parameter. Wenn keine 
+Wassertemperatur angegeben wird, versucht Fangreport, die Wassertemperatur automatisch über PEGELONLINE abzurufen. Die 
+fertigen Fangreporte werden im Ordner `Fänge` gespeichert.
 
 Fangreporte können bis zu 30 Tage rückwirkend erstellt werden. Eine Liste aller Pegelstellen findet sich auf 
 der [Pegelonline-Webseite](https://pegelonline.wsv.de/gast/start).
 
-Zusätzlich unterstützt Fangreport erste Pegelstationen am Po und am Mincio in Italien. Unterstützte Eingaben sind:
+Zusätzlich unterstützt Fangreport erste Pegelstationen in Italien:
 
-* Po Cremona
-* Po Casalmaggiore
-* Po Boretto
-* Po Borgoforte
-* Mincio Goito
-* Mincio Mantova
-* Mincio Peschiera del Garda
+am Po
+* **Piacenza**,
+* Cremona,
+* **Casalmaggiore**,
+* **Boretto**,
+* Borgoforte,
+* Sermide e Felonica/Castelmassa,
+* **Pontelagoscuro**,
+* **Polesella**,
+* **Cavanella**;
 
-Bei italienischen Stationen versucht Fangreport, Pegeldaten automatisch über die jeweilige regionale Datenquelle abzurufen.
-Wenn für die Station keine Wassertemperatur verfügbar ist, kann die Wassertemperatur weiterhin manuell angegeben werden.
+am Mincio
+* **Peschiera del Garda**,
+* Monzambano,
+* **Goito**,
+* **Lago Superiore**,
+* **Lago di Mezzo**,
+* **Vallazza**,
+* **Governolo**;
+
+und am Oglio
+* Marcaria.
+
+Für italienische Stationen versucht Fangreport, Pegeldaten automatisch über die jeweilige regionale Datenquelle 
+abzurufen.
+Dabei werden die Daten aller fett geschriebenen Stationen über das 
+[Portal](https://idrometri.agenziapo.it/Aegis/map/map2d) der *Agenzia Interregionale per il fiume Po (AIPO)* geladen. 
+Hierfür braucht es einen gültigen Refresh-Token und eine gültige Client-ID. Diese müssen bei der ersten Nutzung oder 
+wenn längere Zeit kein Fangreport erstellt wurde aus einem Browser geladen werden. Man findet sie nach dem Öffnen der 
+Seite in den Webinformationen des Entwicklertools. Anschließend müssen die Daten in der JSON-Datei ``aipo_auth.json`` 
+im Ordner ``clients`` gespeichert werden. Als Vorlage dient ``aipo_auth_example.json``, das im selben Ordner liegt. 

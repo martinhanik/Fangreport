@@ -346,7 +346,8 @@ def generate_catch_report(date: str,
                           longitude: float,
                           water_temperature_at_catch: float | None,
                           species: str,
-                          fish_length: float,
+                          fish_length: float | None,
+                          fish_weight: float | None,
                           water_turbidity: str,
                           photo_path: str | None = None,
                           notes: str = "",
@@ -517,40 +518,15 @@ def generate_catch_report(date: str,
             df_water_level.index = remove_timezone(df_water_level.index)
             df_water_level = df_water_level.loc[(df_water_level.index >= plot_start) & (df_water_level.index <= plot_end)]
 
-            if water_temperature_at_catch is None:
-                try:
-                    print(
-                        f"     Keine Wassertemperatur eingegeben. Rufe Wassertemperatur für Station {station_display_name} ab...")
-                    water_temperature_res = load_json(
-                        water_temperature_url,
-                        {"start": pegel_start},
-                        "Wassertemperaturdaten"
-                    )
-
-                    df_water_temperature = pd.DataFrame({
-                        "Zeit": pd.to_datetime([eintrag["timestamp"] for eintrag in water_temperature_res]),
-                        "Wassertemperatur": [eintrag["value"] for eintrag in water_temperature_res]
-                    }).set_index("Zeit")
-                    df_water_temperature.index = remove_timezone(df_water_temperature.index)
-                    df_water_temperature = df_water_temperature.loc[
-                        (df_water_temperature.index >= plot_start)
-                        & (df_water_temperature.index <= plot_end)
-                        ]
-
-                    water_temperature_at_catch = get_nearest_value(
-                        df_water_temperature,
-                        catch_datetime,
-                        "Wassertemperatur"
-                    )
-
-                except Exception as e:
-                    print(f"     Keine Wassertemperaturdaten über PEGELONLINE verfügbar: {e}")
         else:
             df_water_level = italian_station_result["df_water_level"]
             df_water_level = df_water_level.loc[
                 (df_water_level.index >= plot_start)
                 & (df_water_level.index <= plot_end)
             ]
+
+        # set measurements that are clearly wrong to None
+        df_water_level = df_water_level.mask(np.abs(df_water_level) > 10 ** 5, None)
 
         air_temperature_at_catch = get_nearest_value(df_weather, catch_datetime, "Temperatur")
         air_pressure_at_catch = get_nearest_value(df_weather, catch_datetime, "Luftdruck")
@@ -568,6 +544,7 @@ def generate_catch_report(date: str,
         report_data = {
             "Fischart": species,
             "Länge": format_value(fish_length, "cm", 0),
+            "Gewicht": format_value(fish_weight, "kg", 1),
             "Datum": catch_datetime.strftime("%d.%m.%Y"),
             "Fangzeit": catch_datetime.strftime("%H:%M Uhr"),
             "Fangort": f"{latitude:.5f}, {longitude:.5f}",
@@ -1056,16 +1033,49 @@ def create_pdf_report(
             fontsize=10,
             va="center"
         )
+
+        fish_details = []
+
+        if report_data.get("Länge") != "Keine Daten":
+            fish_details.append(report_data["Länge"])
+
+        if report_data.get("Gewicht") != "Keine Daten":
+            fish_details.append(report_data["Gewicht"])
+
+        fish_measurements = " · ".join(fish_details)
+
         header_axis.text(
             0.97,
-            0.50,
-            report_data.get("Fischart", "") + " " + report_data.get("Länge", ""),
-            color="white",
+            0.62,
+            report_data.get("Fischart", ""),
             fontsize=18,
             fontweight="bold",
+            color="white",
             ha="right",
             va="center"
         )
+
+        if fish_measurements != "":
+            header_axis.text(
+                0.97,
+                0.25,
+                fish_measurements,
+                color="#dbe9f6",
+                fontsize=10,
+                ha="right",
+                va="center"
+            )
+
+        # header_axis.text(
+        #     0.97,
+        #     0.50,
+        #     report_data.get("Fischart", "") + " " + report_data.get("Länge", ""),
+        #     color="white",
+        #     fontsize=18,
+        #     fontweight="bold",
+        #     ha="right",
+        #     va="center"
+        # )
 
         card_width = 0.205
         card_gap = 0.02
@@ -1130,15 +1140,31 @@ def create_pdf_report(
             spine.set_linewidth(1)
 
         if notes.strip():
+            import textwrap
+
+            def fit_notes(text, max_chars=52, max_lines=12):
+                lines = []
+
+                for paragraph in text.split("\n"):
+                    lines.extend(textwrap.wrap(paragraph, width=max_chars))
+
+                if len(lines) > max_lines:
+                    lines = lines[:max_lines]
+                    lines[-1] += " ..."
+
+                return "\n".join(lines)
+
+            notes_text = fit_notes(notes.strip())
+
             notes_axis.text(
                 0.05,
                 0.92,
-                notes.strip(),
+                notes_text,
                 fontsize=9,
                 color="#111827",
                 va="top",
-                wrap=True,
-                transform=notes_axis.transAxes
+                transform=notes_axis.transAxes,
+                clip_on=True
             )
         else:
             notes_axis.text(
@@ -1253,7 +1279,7 @@ if __name__ == "__main__":
         default="Wels"
     )
     parser.add_argument(
-        "--Messstation",
+        "--Pegelstation",
         type=str,
         help="Pegelmessstation verfügbar in pegelonline.wsv.de"
     )
@@ -1270,7 +1296,12 @@ if __name__ == "__main__":
     parser.add_argument(
         "--Länge",
         type=int,
-        help="Länge des Fangs in ganzen Zentimetern"
+        help="Länge des Fangs in Zentimetern"
+    )
+    parser.add_argument(
+        "--Gewicht",
+        type=float,
+        help="Gewicht des Fangs in Kilogramm"
     )
     parser.add_argument(
         "--Wassertemperatur",
@@ -1298,11 +1329,12 @@ if __name__ == "__main__":
 
     date = args.Datum
     catchtime = args.Zeit
-    station = args.Messstation
+    station = args.Pegelstation
     latitude = args.Längengrad
     longitude = args.Breitengrad
     species = args.Fischart
     fish_length = args.Länge
+    fish_weight = args.Gewicht
     water_temperature = args.Wassertemperatur
     water_turbidity = args.Trübung
     photo_path = args.Fotopfad
@@ -1333,6 +1365,7 @@ if __name__ == "__main__":
             water_temperature,
             species,
             fish_length,
+            fish_weight,
             water_turbidity,
             photo_path,
             notes

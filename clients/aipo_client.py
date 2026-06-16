@@ -4,6 +4,9 @@ from pathlib import Path
 
 import pandas as pd
 import requests
+import urllib3
+
+urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 
 class AipoClient:
@@ -171,7 +174,15 @@ class AipoClient:
             "ui_culture": "en",
         }
 
-        token = self.refresh_access_token()["access_token"]
+        try:
+            token = self.refresh_access_token()["access_token"]
+        except requests.HTTPError as e:
+            if e.response is not None and "invalid_grant" in e.response.text:
+                raise RuntimeError(
+                    "AIPo refresh token is no longer valid. "
+                    "Please update aipo_auth.json from the browser."
+                ) from e
+            raise
 
         headers = {
             "Authorization": f"Bearer {token}",

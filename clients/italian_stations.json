@@ -1,4 +1,15 @@
 {
+  "po piacenza": {
+    "display_name": "Piacenza",
+    "river": "Po",
+    "water": "Po",
+    "latitude": 45.058611,
+    "longitude": 9.704166,
+    "provider": "aipo",
+    "level_sensor_id": 16798,
+    "station_keywords": ["piacenza"],
+    "aliases": ["piacenza"]
+  },
   "po cremona": {
     "display_name": "Cremona",
     "river": "Po",
@@ -8,8 +19,29 @@
     "provider": "arpa_lombardia",
     "level_sensor_id": 8158,
     "station_keywords": ["cremona", "gerre borghi"],
-    "level_sensor_type": "Livello Idrometrico",
     "aliases": ["cremona"]
+  },
+  "po casalmaggiore": {
+    "display_name": "Casalmaggiore",
+    "river": "Po",
+    "water": "Po",
+    "latitude": 44.976111,
+    "longitude": 10.419166,
+    "provider": "aipo",
+    "level_sensor_id": 14019,
+    "station_keywords": ["casalmaggiore"],
+    "aliases": ["casalmaggiore"]
+  },
+  "po boretto": {
+    "display_name": "Boretto",
+    "river": "Po",
+    "water": "Po",
+    "latitude": 44.905833,
+    "longitude": 10.560277,
+    "provider": "aipo",
+    "level_sensor_id": 14017,
+    "station_keywords": ["boretto"],
+    "aliases": ["boretto"]
   },
   "po borgoforte": {
     "display_name": "Borgoforte",
@@ -20,7 +52,6 @@
     "provider": "arpa_lombardia",
     "level_sensor_id": 8101,
     "station_keywords": ["borgoforte", "moteggiana", "suzzara", "san benedetto po"],
-    "level_sensor_type": "Livello Idrometrico",
     "aliases": ["borgoforte"]
   },
   "po sermide e felonica": {
@@ -32,9 +63,41 @@
     "provider": "arpa_lombardia",
     "level_sensor_id": 8154,
     "station_keywords": ["sermide", "felonica", "castelmassa"],
-    "level_sensor_type": "Livello Idrometrico",
     "aliases": ["sermide", "felonica", "sermide e felonica", "castelmassa"]
-    },
+  },
+  "po pontelagoscuro": {
+    "display_name": "Pontelagoscuro",
+    "river": "Po",
+    "water": "Po",
+    "latitude": 44.887500,
+    "longitude": 11.607500,
+    "provider": "aipo",
+    "level_sensor_id": 17011,
+    "station_keywords": ["ferrara"],
+    "aliases": ["pontelagoscuro"]
+  },
+  "po polesella": {
+    "display_name": "Polesella",
+    "river": "Po",
+    "water": "Po",
+    "latitude": 44.958333,
+    "longitude": 11.756388,
+    "provider": "aipo",
+    "level_sensor_id": 15980,
+    "station_keywords": ["polesella"],
+    "aliases": ["polesella"]
+  },
+  "po cavanella": {
+    "display_name": "Cavanella",
+    "river": "Po",
+    "water": "Po",
+    "latitude": 45.030000,
+    "longitude": 12.163333,
+    "provider": "aipo",
+    "level_sensor_id": 15969,
+    "station_keywords": ["cavanella", "porto viro"],
+    "aliases": ["cavanella"]
+  },
   "mincio peschiera del garda": {
     "display_name": "Peschiera del Garda",
     "river": "Mincio",
