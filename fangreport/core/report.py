@@ -1,7 +1,4 @@
 import os
-import argparse
-import unicodedata
-import json
 import requests
 import pandas as pd
 
@@ -17,7 +14,7 @@ import scipy.stats as stats
 from datetime import datetime, timedelta
 from PIL import Image
 
-from clients import AipoClient
+from fangreport.data_loading.water_level import load_italian_station_data, load_german_station_data
 
 
 def describe_weather_code(code):
@@ -96,174 +93,6 @@ def format_value(value, unit="", decimals=1):
         return value
 
     return f"{value:.{decimals}f} {unit}".strip()
-
-
-def normalize_station_name(value):
-    value = value.strip().lower()
-    value = unicodedata.normalize("NFKD", value)
-    value = "".join(char for char in value if not unicodedata.combining(char))
-    return " ".join(value.replace("-", " ").replace("_", " ").split())
-
-
-def italian_stations_dict():
-    stations = {}
-
-    with open("clients/italian_stations.json", "r", encoding="utf-8") as f:
-        italian_stations = json.load(f)
-
-    for canonical_name, station_data in italian_stations.items():
-        stations[normalize_station_name(canonical_name)] = station_data
-
-        for alias in station_data.get("aliases", []):
-            stations[normalize_station_name(alias)] = station_data
-
-    return stations
-
-
-def find_italian_station(station):
-    return italian_stations_dict().get(normalize_station_name(station))
-
-
-def load_arpa_lombardia_sensor_values(sensor_id, start, end):
-    url = "https://www.dati.lombardia.it/resource/647i-nhxk.json"
-    params = {
-        "$limit": 50000,
-        "$order": "data ASC",
-        "idsensore": str(sensor_id),
-        "$where": (
-            f"data between '{start.strftime('%Y-%m-%dT%H:%M:%S')}' "
-            f"and '{end.strftime('%Y-%m-%dT%H:%M:%S')}'"
-        ),
-    }
-
-    response = requests.get(url, params=params, timeout=20)
-    response.raise_for_status()
-    raw_data = response.json()
-
-    if not raw_data:
-        return pd.DataFrame(columns=["Zeit", "Wert"]).set_index("Zeit")
-
-    data_frame = pd.DataFrame(raw_data)
-
-    if "data" not in data_frame.columns or "valore" not in data_frame.columns:
-        raise ValueError(
-            "Die ARPA-Lombardia-Daten enthalten nicht die erwarteten Spalten "
-            "'data' und 'valore'."
-        )
-
-    data_frame = data_frame.rename(
-        columns={
-            "data": "Zeit",
-            "valore": "Wert",
-        }
-    )
-
-    data_frame["Zeit"] = pd.to_datetime(data_frame["Zeit"], errors="coerce")
-    data_frame["Wert"] = pd.to_numeric(data_frame["Wert"], errors="coerce")
-    data_frame = data_frame.dropna(subset=["Zeit", "Wert"])
-    data_frame = data_frame.set_index("Zeit").sort_index()
-
-    if data_frame.index.tz is not None:
-        data_frame.index = data_frame.index.tz_convert("Europe/Rome").tz_localize(None)
-
-    return data_frame
-
-
-def load_italian_station_data(station, start, end, catch_datetime, water_temperature_at_catch):
-    station_data = find_italian_station(station)
-
-    if station_data is None:
-        return None
-
-    if station_data["provider"] != "arpa_lombardia" and station_data["provider"] != "aipo":
-        raise ValueError(
-            f"Die Station '{station_data['display_name']}' ist bereits angelegt, "
-            "aber die automatische Datenabfrage für diese regionale Quelle ist noch nicht konfiguriert."
-        )
-
-    level_sensor_id = station_data.get("level_sensor_id")
-
-    if level_sensor_id is None:
-        raise ValueError(
-            f"Für die italienische Station '{station_data['display_name']}' "
-            "wurde kein Pegelsensor gefunden."
-        )
-
-    if station_data["provider"] == "arpa_lombardia":
-        source = "ARPA Lombardia"
-        df_water_level_raw = load_arpa_lombardia_sensor_values(
-            level_sensor_id,
-            start,
-            end + timedelta(days=1)
-        )
-    else:
-        source = "AIPO"
-        client = AipoClient.from_file("./clients/aipo_auth.json")
-        df_water_level_raw = client.load_sensor_values(
-            level_sensor_id,
-            start,
-            end + timedelta(days=1)
-        )
-
-    if df_water_level_raw.empty:
-        raise ValueError(
-            f"Für die italienische Station '{station_data['display_name']}' "
-            f"wurden im gewählten Zeitraum keine Pegeldaten für Sensor {level_sensor_id} gefunden."
-        )
-
-    df_water_level = df_water_level_raw.rename(columns={"Wert": "Wasserstand"})
-
-    return {
-        "station_display_name": station_data["display_name"],
-        "water": station_data["water"],
-        "df_water_level": df_water_level,
-        "water_temperature_at_catch": water_temperature_at_catch,
-        "source": source,
-    }
-
-
-def pegelonline_stations_dict():
-    """
-    Fetches data from the Pegel Online API and returns a dictionary containing station information.
-
-    The function retrieves a list of water level stations in JSON format from the Pegel Online API. It
-    processes the data to create a dictionary where the keys are the long names of the stations and
-    the corresponding values are dictionaries containing station details such as station number,
-    latitude, longitude, and the related water body's name.
-
-    :raises RuntimeError: If there is an error in making the HTTP request to the Pegel Online API.
-
-    :return: A dictionary where keys are the stations' long names (str), and values are dictionaries
-             containing details such as station number (int), latitude (float), longitude (float),
-             and water body name (str).
-    :rtype: dict
-    """
-
-    url = "https://www.pegelonline.wsv.de/webservices/rest-api/v2/stations.json"
-
-    try:
-        response = requests.get(url)
-        response.raise_for_status()
-        raw_data = response.json()
-
-        # Erstellt das gewünschte Dictionary
-        pegel_dict = {}
-        for station in raw_data:
-            name = station.get("longname")
-
-            # Nur Stationen mit gültigem Namen aufnehmen
-            if name:
-                pegel_dict[name] = {
-                    "stationsnummer": station.get("number"),
-                    "breitengrad": station.get("latitude"),
-                    "laengengrad": station.get("longitude"),
-                    "gewaesser": station.get("water")["longname"].title()
-                }
-
-    except requests.exceptions.RequestException as e:
-        raise RuntimeError(f"Fehler beim Abrufen der Daten: {e}")
-
-    return pegel_dict
 
 
 def wind_direction_arrow(deg):
@@ -389,16 +218,14 @@ def generate_catch_report(date: str,
         station,
         start,
         end,
-        catch_datetime,
         water_temperature_at_catch
     )
 
     station_number = None
     pegel_url = None
-    water_temperature_url = None
 
     if italian_station_result is None:
-        stations_dict = pegelonline_stations_dict()
+        stations_dict = load_german_station_data()
 
         station_data = stations_dict.get(station.upper())
         if station_data is None:
@@ -448,7 +275,6 @@ def generate_catch_report(date: str,
     pegel_start = start.isoformat()
     if italian_station_result is None:
         pegel_url = f"https://www.pegelonline.wsv.de/webservices/rest-api/v2/stations/{station_number}/W/measurements.json"
-        water_temperature_url = f"https://www.pegelonline.wsv.de/webservices/rest-api/v2/stations/{station_number}/WT/measurements.json"
 
     def load_json(url, params=None, description="Daten"):
         try:
@@ -525,8 +351,11 @@ def generate_catch_report(date: str,
                 & (df_water_level.index <= plot_end)
             ]
 
-        # set measurements that are clearly wrong to None
-        df_water_level = df_water_level.mask(np.abs(df_water_level) > 10 ** 5, None)
+        # Setze klar falsche Werte auf None
+        df_water_level["Wasserstand"] = df_water_level["Wasserstand"].astype("Float64")
+
+        cond = np.abs(df_water_level["Wasserstand"]) > 10 ** 5
+        df_water_level["Wasserstand"] = df_water_level["Wasserstand"].mask(cond, pd.NA)
 
         air_temperature_at_catch = get_nearest_value(df_weather, catch_datetime, "Temperatur")
         air_pressure_at_catch = get_nearest_value(df_weather, catch_datetime, "Luftdruck")
@@ -1066,17 +895,6 @@ def create_pdf_report(
                 va="center"
             )
 
-        # header_axis.text(
-        #     0.97,
-        #     0.50,
-        #     report_data.get("Fischart", "") + " " + report_data.get("Länge", ""),
-        #     color="white",
-        #     fontsize=18,
-        #     fontweight="bold",
-        #     ha="right",
-        #     va="center"
-        # )
-
         card_width = 0.205
         card_gap = 0.02
         card_height = 0.06
@@ -1180,7 +998,7 @@ def create_pdf_report(
         sketch_axis = report_figure.add_axes((0.06, content_y, 0.42, content_height))
         sketch_axis.set_facecolor("white")
         title_obj = sketch_axis.set_title(
-            f"Angelplatz ({report_data.get("Fangort", "Keine Daten")}) ↗",
+            f"Angelplatz ({report_data.get('Fangort', 'Keine Daten')}) ↗",
             loc="left",
             fontsize=12,
             fontweight="bold",
@@ -1258,118 +1076,3 @@ def create_pdf_report(
         )
         pdf.savefig(plot_figure)
         plt.close(plot_figure)
-
-
-if __name__ == "__main__":
-    parser = argparse.ArgumentParser()
-    parser.add_argument(
-        "--Datum",
-        type=str,
-        help="Datum des Fangs (YYYY-MM_DD)"
-    )
-    parser.add_argument(
-        "--Zeit",
-        type=str,
-        help="Zeitpunkt des Fangs (HH:MM)"
-    )
-    parser.add_argument(
-        "--Fischart",
-        type=str,
-        help="gefangene Fischart (z. B. 'Hecht', Wels', 'Zander')",
-        default="Wels"
-    )
-    parser.add_argument(
-        "--Pegelstation",
-        type=str,
-        help="Pegelmessstation verfügbar in pegelonline.wsv.de"
-    )
-    parser.add_argument(
-        "--Längengrad",
-        type=float,
-        help="Längengrad des Fangorts (-90 <= Längengrad <= 90)"
-    )
-    parser.add_argument(
-        "--Breitengrad",
-        type=float,
-        help="Breitengrad des Fangorts (-180 <= Breitengrad <= 180)"
-    )
-    parser.add_argument(
-        "--Länge",
-        type=int,
-        help="Länge des Fangs in Zentimetern"
-    )
-    parser.add_argument(
-        "--Gewicht",
-        type=float,
-        help="Gewicht des Fangs in Kilogramm"
-    )
-    parser.add_argument(
-        "--Wassertemperatur",
-        type=float,
-        help="Wassertemperatur in Grad Celsius. Wenn nicht angegeben, wird versucht, sie über PEGELONLINE abzurufen."
-    )
-    parser.add_argument(
-        "--Trübung",
-        type=str,
-        help="Beschreibung der Trübung, z. B. 'klar' oder 'leicht eingetrübt'",
-        default="Keine Daten"
-    )
-    parser.add_argument(
-        "--Fotopfad",
-        type=str,
-        help="Speicherort des Fangfotos"
-    )
-    parser.add_argument(
-        "--Notizen",
-        type=str,
-        help="Notizen für den Fangreport",
-        default=""
-    )
-    args = parser.parse_args()
-
-    date = args.Datum
-    catchtime = args.Zeit
-    station = args.Pegelstation
-    latitude = args.Längengrad
-    longitude = args.Breitengrad
-    species = args.Fischart
-    fish_length = args.Länge
-    fish_weight = args.Gewicht
-    water_temperature = args.Wassertemperatur
-    water_turbidity = args.Trübung
-    photo_path = args.Fotopfad
-    notes = args.Notizen
-
-    try:
-        if datetime.now() < datetime(int(date[:4]), int(date[5:7]), int(date[8:]), int(catchtime[:2]),
-                                     int(catchtime[3:5])):
-            raise ValueError(
-                f"Das Fangdatum liegt in der Zukunft."
-            )
-        if not -90 <= latitude <= 90:
-            raise ValueError(
-                f"Ungültiger Breitengrad: {latitude}. Erwartet wird ein Wert zwischen -90 und 90."
-            )
-
-        if not -180 <= longitude <= 180:
-            raise ValueError(
-                f"Ungültiger Längengrad: {longitude}. Erwartet wird ein Wert zwischen -180 und 180."
-            )
-
-        generate_catch_report(
-            date,
-            catchtime,
-            station,
-            latitude,
-            longitude,
-            water_temperature,
-            species,
-            fish_length,
-            fish_weight,
-            water_turbidity,
-            photo_path,
-            notes
-        )
-    except ValueError as e:
-        print(f"❌ Eingabefehler: {e}")
-        raise SystemExit(1)

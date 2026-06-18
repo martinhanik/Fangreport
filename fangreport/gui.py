@@ -3,7 +3,7 @@ import tkinter as tk
 from tkinter import filedialog, messagebox, ttk
 from datetime import datetime
 
-from fangreport import generate_catch_report
+from fangreport.core import generate_catch_report
 
 
 class FangreportApp(tk.Tk):
@@ -50,7 +50,7 @@ class FangreportApp(tk.Tk):
             ("Gewicht", "kg, z. B. 8.5", False),
             ("Datum", "YYYY-MM-DD", True),
             ("Zeit", "HH:MM", True),
-            ("Längen- und Breitengrad", "z. B. 49.357599616156776, 8.494281048199765", True),
+            ("Breiten- und Längengrad", "z. B. 49.357599616156776, 8.494281048199765", True),
             ("Pegelstation", "z. B. Speyer", True),
             ("Wassertemperatur", "optional, °C", False),
             ("Trübung", "z. B. klar", False),

@@ -140,7 +140,7 @@ class AipoClient:
         self.refresh_token = r["refresh_token"]
 
         # Speichern des Tokens
-        with open("./clients/aipo_auth.json", "w") as f:
+        with open("fangreport/data/aipo_auth.json", "w") as f:
             json.dump(
                 {
                     "refresh_token": self.refresh_token,

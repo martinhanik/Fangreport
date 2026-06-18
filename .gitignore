@@ -1,4 +1,4 @@
-clients/aipo_auth.json
+fangreport/data/aipo_auth.json
 .env
 *.token
 *.pdf
