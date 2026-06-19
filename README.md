@@ -71,19 +71,20 @@ sind mit einem Stern (*) markiert.
 Mit dem folgenden Befehl lässt sich ein Fangreport in der Konsole erstellen:
 
 ```
-python fangreport.client --Fischart Wels --Länge 130 --Gewicht 13 --Datum 2026-05-22 --Zeit 20:00 --Breitengrad 49.357599616156776 --Längengrad 8.494281048199765 --Pegelstation Speyer --Wassertemperatur 12.5 --Trübung klar --Fotopfad /Pfad/zum/Fangfoto
+#  Das Datum muss innerhalb der letzten 30 Tage liegen.
+python -m fangreport.client --Fischart Wels --Länge 130 --Gewicht 13 --Datum 2026-05-22 --Zeit 20:00 --Breitengrad 49.357599616156776 --Längengrad 8.494281048199765 --Pegelstation Speyer --Wassertemperatur 12.5 --Trübung klar 
 ```
 
 Hier wurde am 22.5.2026 um 20 Uhr ein Wels von 130 cm und 13 kg gefangen. Die Koordinaten des Fangorts (am Rhein) 
-sind (49.357599616156776, 8.494281048199765). Die Messstation, von der der Pegel abgefragt werden soll, ist Spyer. 
-Zum Zeitpunkt des Fangs war das Wasser klar und hatte eine Temperatur von 12,5 Grad Celsius. Ein Fangfoto liegt in 
-`/Pfad/zum/Fangfoto`. 
+sind (49.357599616156776, 8.494281048199765). Die Messstation, von der der Pegel abgefragt werden soll, ist Speyer. 
+Zum Zeitpunkt des Fangs war das Wasser klar und hatte eine Temperatur von 12,5 Grad Celsius. Der Ordnerpfad zu einem 
+Fangfoto könnte noch mit dem Argument `--Fotopfad` angegeben werden. 
 
-Länge, Wassertemperatur, Trübung und der Fotopfad sind optionale Parameter. Die 
-fertigen Fangreporte werden im Ordner `Fänge` gespeichert.
+Die Argumente `--Länge`, `--Wassertemperatur`, `--Trübung` und `--Fotopfad` sind optionale Parameter. Ein fertiger 
+Fangreport wird im Ordner `Fänge` gespeichert.
 
-Fangreporte können für deutsche Pegelstationen bis zu 30 Tage rückwirkend erstellt werden. Eine Liste aller Pegelstellen findet sich auf 
-der [Pegelonline-Webseite](https://pegelonline.wsv.de/gast/start).
+Fangreporte können für deutsche Pegelstationen bis zu 30 Tage rückwirkend erstellt werden. Eine Liste aller Pegelstellen 
+findet sich auf der [Pegelonline-Webseite](https://pegelonline.wsv.de/gast/start).
 
 Zusätzlich unterstützt Fangreport erste Pegelstationen in Italien:
 
@@ -110,7 +111,7 @@ am Mincio
 und am Oglio
 * Marcaria.
 
-Italienische Stationen erlauben es teilweise einen Report von einem Fang zu erstellen, der mehr als 30 Tage 
+Italienische Stationen erlauben es teilweise, einen Report von einem Fang zu erstellen, der mehr als 30 Tage 
 zurückliegt.  
 
 Für italienische Stationen versucht Fangreport, Pegeldaten automatisch über die jeweilige regionale Datenquelle 
