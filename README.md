@@ -13,15 +13,7 @@ wenn es um das Festhalten von Erinnerungen geht, hilft *Fangreport* einfach und 
 
 ### Voraussetzungen
 
-Installieren Sie [git](https://git-scm.com) auf dem Computer. 
-
-Fangreport benötigt eine virtuelle Umgebung mit den folgenden Python-Paketen:
-* numpy,
-* pandas,
-* requests,
-* matplotlib,
-* typer.
-
+Installieren Sie [git](https://git-scm.com) auf dem Computer.
 
 ### Repository
 
@@ -68,7 +60,7 @@ python -m fangreport.gui
 starten. Die GUI erlaubt es, alle relevanten Angaben zu einem Fang zu erfassen. Notwendige Angaben 
 sind mit einem Stern (*) markiert. 
 
-Mit dem folgenden Befehl lässt sich ein Fangreport in der Konsole erstellen:
+Mit dem folgenden Befehl lässt sich ein *Fangreport* in der Konsole erstellen:
 
 ```
 #  Das Datum muss innerhalb der letzten 30 Tage liegen.
@@ -86,7 +78,7 @@ Fangreport wird im Ordner `Fänge` gespeichert.
 Fangreporte können für deutsche Pegelstationen bis zu 30 Tage rückwirkend erstellt werden. Eine Liste aller Pegelstellen 
 findet sich auf der [Pegelonline-Webseite](https://pegelonline.wsv.de/gast/start).
 
-Zusätzlich unterstützt Fangreport erste Pegelstationen in Italien:
+Zusätzlich unterstützt *Fangreport* erste Pegelstationen in Italien:
 
 am Po
 * **Piacenza**,
