@@ -4,9 +4,6 @@ from pathlib import Path
 
 import pandas as pd
 import requests
-import urllib3
-
-urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 
 class AipoClient:
@@ -54,8 +51,8 @@ class AipoClient:
     Spalten:
 
     ```
-    Zeit    Zeitstempel der Messung
-    Wert    Gemessener Sensorwert
+    time           Zeitstempel der Messung
+    water_level    Gemessener Sensorwert
     ```
 
     ## Messdaten
@@ -71,7 +68,7 @@ class AipoClient:
     Die API liefert die Zeitreihe im Feld `plausibleData` als Liste von
 
     ```
-    [epoch_timestamp_ms, value]
+    [epoch_timestamp_ms, water_level]
     ```
 
     welche vom Client automatisch in ein DataFrame umgewandelt wird.
@@ -130,7 +127,7 @@ class AipoClient:
         r = requests.post(
             url,
             data=payload,
-            verify=False,   # wegen des Zertifikatsproblems
+            verify=True,
             timeout=30,
         )
 
@@ -159,7 +156,7 @@ class AipoClient:
     ) -> pd.DataFrame:
         """
         Lädt AIPo-Messwerte und gibt ein DataFrame mit den
-        Spalten 'Zeit' und 'Wert' zurück.
+        Spalten 'time' und 'water_level' zurück.
         """
 
         url = f"https://idrometri.agenziapo.it/datascapeA/v3/data-combo/{element_id}"
@@ -194,7 +191,7 @@ class AipoClient:
             url,
             params=params,
             headers=headers,
-            verify=False,   # später besser Zertifikat sauber lösen
+            verify=True,
             timeout=30,
         )
 
@@ -211,16 +208,16 @@ class AipoClient:
 
         df = pd.DataFrame(
             data,
-            columns=["EpochTime", "Wert"]
+            columns=["EpochTime", "water_level"]
         )
 
-        df["Zeit"] = pd.to_datetime(df["EpochTime"], unit="ms", utc=True).dt.tz_convert(None)
+        df["time"] = pd.to_datetime(df["EpochTime"], unit="ms", utc=True).dt.tz_convert(None)
 
         # wollen Pegelstand in cm
-        df["Wert"] = df["Wert"] * 100
+        df["water_level"] = df["water_level"] * 100
 
         df = df.drop(columns=["EpochTime"])
-        df = df.set_index("Zeit")
+        df = df.set_index("time")
 
         df = df.sort_index()
 

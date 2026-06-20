@@ -39,10 +39,10 @@ def load_german_station_data():
             # Nur Stationen mit gültigem Namen aufnehmen
             if name:
                 pegel_dict[name] = {
-                    "stationsnummer": station.get("number"),
-                    "breitengrad": station.get("latitude"),
-                    "laengengrad": station.get("longitude"),
-                    "gewaesser": station.get("water")["longname"].title()
+                    "number": station.get("number"),
+                    "latitude": station.get("latitude"),
+                    "longitude": station.get("longitude"),
+                    "water": station.get("water")["longname"].title()
                 }
 
     except requests.exceptions.RequestException as e:
@@ -52,6 +52,15 @@ def load_german_station_data():
 
 
 def load_italian_station_data(station, start, end, water_temperature_at_catch):
+    """
+    Ruft Daten von der ARPA Lombardia API oder dem Portal der AIPO ab und gibt ein Dictionary mit Stationsinformationen
+    zurück.
+
+    :return: Ein Dictionary, bei dem die Schlüssel die Langnamen der Stationen (str) sind und die
+             Werte Dictionaries sind, die Details wie Gewässer (str), Wasserstand (float),
+             Wassertemperatur (float) und Provider (str) enthalten.
+    :rtype: dict
+    """
     station_data = find_italian_station(station)
 
     if station_data is None:
@@ -73,7 +82,7 @@ def load_italian_station_data(station, start, end, water_temperature_at_catch):
 
     if station_data["provider"] == "arpa_lombardia":
         source = "ARPA Lombardia"
-        df_water_level_raw = load_arpa_lombardia_sensor_values(
+        df_water_level = load_arpa_lombardia_sensor_values(
             level_sensor_id,
             start,
             end + timedelta(days=1)
@@ -81,19 +90,17 @@ def load_italian_station_data(station, start, end, water_temperature_at_catch):
     else:
         source = "AIPO"
         client = AipoClient.from_file("fangreport/data/aipo_auth.json")
-        df_water_level_raw = client.load_sensor_values(
+        df_water_level = client.load_sensor_values(
             level_sensor_id,
             start,
             end + timedelta(days=1)
         )
 
-    if df_water_level_raw.empty:
+    if df_water_level.empty:
         raise ValueError(
             f"Für die italienische Station '{station_data['display_name']}' "
             f"wurden im gewählten Zeitraum keine Pegeldaten für Sensor {level_sensor_id} gefunden."
         )
-
-    df_water_level = df_water_level_raw.rename(columns={"Wert": "Wasserstand"})
 
     return {
         "station_display_name": station_data["display_name"],
@@ -147,7 +154,7 @@ def load_arpa_lombardia_sensor_values(sensor_id, start, end):
     raw_data = response.json()
 
     if not raw_data:
-        return pd.DataFrame(columns=["Zeit", "Wert"]).set_index("Zeit")
+        return pd.DataFrame(columns=["time", "water_level"]).set_index("time")
 
     data_frame = pd.DataFrame(raw_data)
 
@@ -159,15 +166,15 @@ def load_arpa_lombardia_sensor_values(sensor_id, start, end):
 
     data_frame = data_frame.rename(
         columns={
-            "data": "Zeit",
-            "valore": "Wert",
+            "data": "time",
+            "valore": "water_level",
         }
     )
 
-    data_frame["Zeit"] = pd.to_datetime(data_frame["Zeit"], errors="coerce")
-    data_frame["Wert"] = pd.to_numeric(data_frame["Wert"], errors="coerce")
-    data_frame = data_frame.dropna(subset=["Zeit", "Wert"])
-    data_frame = data_frame.set_index("Zeit").sort_index()
+    data_frame["time"] = pd.to_datetime(data_frame["time"], errors="coerce")
+    data_frame["water_level"] = pd.to_numeric(data_frame["water_level"], errors="coerce")
+    data_frame = data_frame.dropna(subset=["time", "water_level"])
+    data_frame = data_frame.set_index("time").sort_index()
 
     if data_frame.index.tz is not None:
         data_frame.index = data_frame.index.tz_convert("Europe/Rome").tz_localize(None)

@@ -143,7 +143,7 @@ def MetricTile(label, value, meta=None):
 
     # 2. Windrichtung
     if meta.get("direction") is not None:
-        display_value = f"{value} {wind_direction_arrow(meta['direction'])}"
+        display_value = f"{value} {wind_direction_arrow(meta["direction"])}"
 
     # 3. Trend
     if "trend" in meta:
@@ -177,11 +177,31 @@ def generate_catch_report(date: str,
                           species: str,
                           fish_length: float | None,
                           fish_weight: float | None,
-                          water_turbidity: str,
+                          water_clarity: str,
                           photo_path: str | None = None,
                           notes: str = "",
                           n_days_past: int = 3,
-                          n_days_future: int = 1):
+                          n_days_future: int = 1,
+                          report_location: str | None = "./fänge"):
+    """
+    Generiert einen Fangreport und speichert in PDF.
+
+    :param date: Fangdatum im Format YYYY-MM-DD
+    :param time_of_catch: Fangzeit im Format HH:MM
+    :param station: Pegelstelle (PEGELONLINE-ID oder Name einer italienischen Station)
+    :param latitude: Breitengrad des Fangorts
+    :param longitude: Längengrad des Fangorts
+    :param water_temperature_at_catch: Wassertemperatur am Fangort
+    :param species: Fischart
+    :param fish_length: Fischlänge
+    :param fish_weight: Fischgewicht
+    :param water_clarity: Wassertrübung
+    :param photo_path: Pfad zur Fotografie, optional
+    :param notes: Anmerkungen zum Fang
+    :param n_days_past: Anzahl der angezeigten Tage vor dem Fangdatum
+    :param n_days_future: Anzahl der angezeigten Tage nach dem Fangdatum
+    :param report_location: Speicherort des Fangreports, „None“ sollte nur für Tests verwendet werden.
+    """
     # 1. KONFIGURATION
 
     # Zeitraum um das Fangdatum herum
@@ -235,8 +255,8 @@ def generate_catch_report(date: str,
             )
 
         # Verifizierte PEGELONLINE-Pegelstation
-        station_number = station_data["stationsnummer"]
-        water = station_data["gewaesser"]
+        station_number = station_data["number"]
+        water = station_data["water"]
         station_display_name = station.title()
         station_source = "PEGELONLINE"
     else:
@@ -311,15 +331,15 @@ def generate_catch_report(date: str,
         weather_res = weather_json["hourly"]
 
         df_weather = pd.DataFrame({
-            "Zeit": pd.to_datetime(weather_res["time"]),
-            "Temperatur": weather_res["temperature_2m"],
-            "Luftdruck": weather_res["surface_pressure"],
-            "Wind": weather_res["wind_speed_10m"],
-            "Windrichtung": weather_res["wind_direction_10m"],
-            "Wettercode": weather_res["weather_code"],
+            "time": pd.to_datetime(weather_res["time"]),
+            "temperature": weather_res["temperature_2m"],
+            "air_pressure": weather_res["surface_pressure"],
+            "wind": weather_res["wind_speed_10m"],
+            "wind_direction": weather_res["wind_direction_10m"],
+            "weather_code": weather_res["weather_code"],
             "Regen": weather_res["precipitation"],
-            "Wolkenbedeckung": weather_res["cloud_cover"]
-        }).set_index("Zeit")
+            "cloud_cover": weather_res["cloud_cover"]
+        }).set_index("time")
 
 
         def remove_timezone(index):
@@ -338,9 +358,9 @@ def generate_catch_report(date: str,
             water_level_res = load_json(pegel_url, {"start": pegel_start}, "Pegeldaten")
 
             df_water_level = pd.DataFrame({
-                "Zeit": pd.to_datetime([eintrag["timestamp"] for eintrag in water_level_res]),
-                "Wasserstand": [eintrag["value"] for eintrag in water_level_res]
-            }).set_index("Zeit")
+                "time": pd.to_datetime([entry["timestamp"] for entry in water_level_res]),
+                "water_level": [entry["value"] for entry in water_level_res]
+            }).set_index("time")
             df_water_level.index = remove_timezone(df_water_level.index)
             df_water_level = df_water_level.loc[(df_water_level.index >= plot_start) & (df_water_level.index <= plot_end)]
 
@@ -351,18 +371,18 @@ def generate_catch_report(date: str,
                 & (df_water_level.index <= plot_end)
             ]
 
-        # Setze klar falsche Werte auf None
-        df_water_level["Wasserstand"] = df_water_level["Wasserstand"].astype("Float64")
+        # Setze falsche Werte auf None
+        df_water_level["water_level"] = df_water_level["water_level"].astype("Float64")
 
-        cond = np.abs(df_water_level["Wasserstand"]) > 10 ** 5
-        df_water_level["Wasserstand"] = df_water_level["Wasserstand"].mask(cond, pd.NA)
+        cond = np.abs(df_water_level["water_level"]) > 10 ** 5
+        df_water_level["water_level"] = df_water_level["water_level"].mask(cond, pd.NA)
 
-        air_temperature_at_catch = get_nearest_value(df_weather, catch_datetime, "Temperatur")
-        air_pressure_at_catch = get_nearest_value(df_weather, catch_datetime, "Luftdruck")
-        wind_speed_at_catch = get_nearest_value(df_weather, catch_datetime, "Wind")
-        wind_direction_at_catch = get_nearest_value(df_weather, catch_datetime, "Windrichtung")
-        weather_code_at_catch = get_nearest_value(df_weather, catch_datetime, "Wettercode")
-        water_level_at_catch = get_nearest_value(df_water_level, catch_datetime, "Wasserstand")
+        air_temperature_at_catch = get_nearest_value(df_weather, catch_datetime, "temperature")
+        air_pressure_at_catch = get_nearest_value(df_weather, catch_datetime, "air_pressure")
+        wind_speed_at_catch = get_nearest_value(df_weather, catch_datetime, "wind")
+        wind_direction_at_catch = get_nearest_value(df_weather, catch_datetime, "wind_direction")
+        weather_code_at_catch = get_nearest_value(df_weather, catch_datetime, "weather_code")
+        water_level_at_catch = get_nearest_value(df_water_level, catch_datetime, "water_level")
 
         weather_type_at_catch = (
             describe_weather_code(weather_code_at_catch)
@@ -371,23 +391,23 @@ def generate_catch_report(date: str,
         )
 
         report_data = {
-            "Fischart": species,
-            "Länge": format_value(fish_length, "cm", 0),
-            "Gewicht": format_value(fish_weight, "kg", 1),
-            "Datum": catch_datetime.strftime("%d.%m.%Y"),
-            "Fangzeit": catch_datetime.strftime("%H:%M Uhr"),
-            "Fangort": f"{latitude:.5f}, {longitude:.5f}",
-            "Fangort-Link": f"https://www.google.com/maps?q={latitude:.5f},{longitude:.5f}",
-            "Gewässer": water,
-            "Mondphase": calculate_moon_phase(catch_datetime),
-            "Wettertyp": weather_type_at_catch,
-            "Lufttemperatur": format_value(air_temperature_at_catch, "°C"),
-            "Wassertemperatur": format_value(water_temperature_at_catch, "°C"),
-            "Luftdruck": format_value(air_pressure_at_catch, "hPa", 0),
-            "Wind": format_value(wind_speed_at_catch, "km/h", 0),
-            "Pegelstelle": station_display_name,
-            "Wasserstand": format_value(water_level_at_catch, "cm", 0),
-            "Trübung": water_turbidity,
+            "species": species,
+            "fish_length": format_value(fish_length, "cm", 0),
+            "fish_weight": format_value(fish_weight, "kg", 1),
+            "catch_date": catch_datetime.strftime("%d.%m.%Y"),
+            "catch_time": catch_datetime.strftime("%H:%M Uhr"),
+            "catch_location": f"{latitude:.5f}, {longitude:.5f}",
+            "catch_link": f"https://www.google.com/maps?q={latitude:.5f},{longitude:.5f}",
+            "water": water,
+            "moon_phase": calculate_moon_phase(catch_datetime),
+            "weather_type": weather_type_at_catch,
+            "air_temperature": format_value(air_temperature_at_catch, "°C"),
+            "water_temperature": format_value(water_temperature_at_catch, "°C"),
+            "air_pressure": format_value(air_pressure_at_catch, "hPa", 0),
+            "wind": format_value(wind_speed_at_catch, "km/h", 0),
+            "station_name": station_display_name,
+            "water_level": format_value(water_level_at_catch, "cm", 0),
+            "water_clarity": water_clarity,
         }
 
         def slope_of_trend(df, keyword, timeframe_m: int = 360):
@@ -405,19 +425,19 @@ def generate_catch_report(date: str,
 
             return slope
 
-        water_slope = slope_of_trend(df_water_level, "Wasserstand")
-        air_pressure_slope = slope_of_trend(df_weather, "Luftdruck")
-        air_temperature_slope = slope_of_trend(df_weather, "Temperatur", 4320)  # 3 Tage
+        water_slope = slope_of_trend(df_water_level, "water_level")
+        air_pressure_slope = slope_of_trend(df_weather, "air_pressure")
+        air_temperature_slope = slope_of_trend(df_weather, "temperature", 4320)  # 3 Tage
 
         summary_items = [
             MetricTile(
                 "Wetter",
-                report_data.get("Wettertyp", "Keine Daten")
+                report_data.get("weather_type", "Keine Daten")
             ),
 
             MetricTile(
                 "Luft",
-                report_data.get("Lufttemperatur", "Keine Daten"),
+                report_data.get("air_temperature", "Keine Daten"),
                 meta={
                     "trend": (
                         air_temperature_slope
@@ -435,7 +455,7 @@ def generate_catch_report(date: str,
 
             MetricTile(
                 f"Pegel ({station_display_name})",
-                report_data.get("Wasserstand", "Keine Daten"),
+                report_data.get("water_level", "Keine Daten"),
                 meta={
                     "trend": (
                         water_slope
@@ -448,7 +468,7 @@ def generate_catch_report(date: str,
 
             MetricTile(
                 "Wind",
-                report_data.get("Wind", "Keine Daten"),
+                report_data.get("wind", "Keine Daten"),
                 meta={
                     "direction": wind_direction_at_catch
                 }
@@ -456,12 +476,12 @@ def generate_catch_report(date: str,
 
             MetricTile(
                 "Mondphase",
-                report_data.get("Mondphase", "Keine Daten")
+                report_data.get("moon_phase", "Keine Daten")
             ),
 
             MetricTile(
                 "Luftdruck",
-                report_data.get("Luftdruck", "Keine Daten"),
+                report_data.get("air_pressure", "Keine Daten"),
                 meta={
                     "trend": (
                         air_pressure_slope
@@ -474,7 +494,7 @@ def generate_catch_report(date: str,
 
             MetricTile(
                 "Trübung",
-                report_data.get("Trübung", "Keine Daten")
+                report_data.get("water_clarity", "Keine Daten")
             ),
         ]
 
@@ -502,16 +522,16 @@ def generate_catch_report(date: str,
     fig.suptitle(
         f"Wetter- und Pegelverlauf: {start_date} - {end_date}",
         fontsize=14,
-        fontweight='bold'
+        fontweight="bold"
     )
 
     # Hilfsfunktion: Wolkenbedeckung im Regenplot als Hintergrund darstellen.
     # 0 % = hellblau, 100 % = grau.
     def draw_cloud_cover_background(axis):
-        if "Wolkenbedeckung" not in df_weather.columns or df_weather.empty:
+        if "cloud_cover" not in df_weather.columns or df_weather.empty:
             return
 
-        cloud_data = df_weather["Wolkenbedeckung"].fillna(0).clip(0, 100)
+        cloud_data = df_weather["cloud_cover"].fillna(0).clip(0, 100)
 
         clear_sky_color = np.array([0.78, 0.90, 1.00])  # hellblau
         cloudy_color = np.array([0.62, 0.62, 0.62])  # grau
@@ -533,39 +553,39 @@ def generate_catch_report(date: str,
             )
 
     # --- DIAGRAMM 1: WETTER (Temperatur & Luftdruck & Wind) ---
-    color_temp = '#e74c3c'
-    ax1.plot(df_weather.index, df_weather['Temperatur'], color=color_temp, linewidth=2, label='Temperatur (°C)')
-    ax1.set_ylabel('Temperatur / Wind', color=color_temp, fontweight='bold')
-    ax1.set_ylim(0, 35)
-    ax1.tick_params(axis='y', labelcolor=color_temp)
-    ax1.grid(True, linestyle=':', alpha=0.6)
+    color_temp = "#e74c3c"
+    ax1.plot(df_weather.index, df_weather["temperature"], color=color_temp, linewidth=2, label="Temperatur (°C)")
+    ax1.set_ylabel("Temperatur / Wind", color=color_temp, fontweight="bold")
+    ax1.set_ylim(0, 40)
+    ax1.tick_params(axis="y", labelcolor=color_temp)
+    ax1.grid(True, linestyle=":", alpha=0.6)
 
     if plot_start <= forecast_start <= plot_end:
         ax1.axvspan(
             forecast_start,
             plot_end,
-            color='gray',
+            color="gray",
             alpha=0.12,
-            hatch='//',
-            # label='Vorhersage'
+            hatch="//",
+            # label="Vorhersage"
         )
 
         ax1.annotate(
             "Vorhersage",
             xy=(forecast_start, 1),
-            xycoords=('data', 'axes fraction'),
+            xycoords=("data", "axes fraction"),
             xytext=(8, 8),
-            textcoords='offset points',
-            ha='left',
-            va='bottom',
+            textcoords="offset points",
+            ha="left",
+            va="bottom",
             fontsize=9,
-            fontweight='bold',
-            color='dimgray',
+            fontweight="bold",
+            color="dimgray",
             bbox={
-                'boxstyle': 'round,pad=0.3',
-                'facecolor': 'white',
-                'edgecolor': 'gray',
-                'alpha': 0.85
+                "boxstyle": "round,pad=0.3",
+                "facecolor": "white",
+                "edgecolor": "gray",
+                "alpha": 0.85
             }
         )
 
@@ -575,45 +595,45 @@ def generate_catch_report(date: str,
     ax1.axvspan(
         catchtime_start,
         catchtime_ende,
-        color='gold',
+        color="gold",
         alpha=0.18
     )
 
     ax1.annotate(
         f"Fangzeit {time_of_catch}",
         xy=(catch_datetime, 1),
-        xycoords=('data', 'axes fraction'),
+        xycoords=("data", "axes fraction"),
         xytext=(8, 8),
-        textcoords='offset points',
-        ha='left',
-        va='bottom',
+        textcoords="offset points",
+        ha="left",
+        va="bottom",
         fontsize=9,
-        fontweight='bold',
-        color='black',
+        fontweight="bold",
+        color="black",
         bbox={
-            'boxstyle': 'round,pad=0.3',
-            'facecolor': 'white',
-            'edgecolor': 'goldenrod',
-            'alpha': 0.85
+            "boxstyle": "round,pad=0.3",
+            "facecolor": "white",
+            "edgecolor": "goldenrod",
+            "alpha": 0.85
         }
     )
 
     # Zweite Y-Achse für den Luftdruck
     ax2 = ax1.twinx()
-    color_press = '#2980b9'
-    ax2.plot(df_weather.index, df_weather['Luftdruck'], color=color_press, linewidth=2, linestyle='--',
-             label='Luftdruck (hPa)')
-    ax2.set_ylabel('Luftdruck (hPa)', color=color_press, fontweight='bold')
+    color_press = "#2980b9"
+    ax2.plot(df_weather.index, df_weather["air_pressure"], color=color_press, linewidth=2, linestyle="--",
+             label="Luftdruck (hPa)")
+    ax2.set_ylabel("Luftdruck (hPa)", color=color_press, fontweight="bold")
     ax2.set_ylim(970, 1045)
-    ax2.tick_params(axis='y', labelcolor=color_press)
+    ax2.tick_params(axis="y", labelcolor=color_press)
 
     # Windstärke flächig im Hintergrund
-    color_wind = '#2ecc71'
-    ax1.fill_between(df_weather.index, df_weather['Wind'], alpha=0.15, color=color_wind, label='Wind (km/h)')
+    color_wind = "#2ecc71"
+    ax1.fill_between(df_weather.index, df_weather["wind"], alpha=0.15, color=color_wind, label="Wind (km/h)")
 
     # Windrichtung als Pfeile anzeigen
     wind_sample = df_weather.iloc[::6].copy()  # alle 6 Stunden ein Pfeil
-    wind_rad = np.deg2rad(wind_sample["Windrichtung"])
+    wind_rad = np.deg2rad(wind_sample["wind_direction"])
 
     # Meteorologische Windrichtung: Richtung, aus der der Wind kommt.
     # Für die Pfeile drehen wir sie um 180°, damit sie in die Blasrichtung zeigen.
@@ -628,8 +648,8 @@ def generate_catch_report(date: str,
         [arrow_y] * len(wind_sample),
         u,
         v,
-        angles='uv',
-        scale_units='xy',
+        angles="uv",
+        scale_units="xy",
         scale=7,
         width=0.002,
         color=color_wind,
@@ -641,10 +661,10 @@ def generate_catch_report(date: str,
         [],
         [],
         color=color_wind,
-        marker=r'$\rightarrow$',
-        linestyle='None',
+        marker=r"$\rightarrow$",
+        linestyle="None",
         markersize=14,
-        label='Windrichtung'
+        label="Windrichtung"
     )
 
     # Legenden des oberen Plots zusammenführen
@@ -653,13 +673,13 @@ def generate_catch_report(date: str,
 
     ax1.legend(
         lines1 + lines2 + [wind_direction_handle],
-        labels1 + labels2 + ['Windrichtung'],
-        loc='upper left'
+        labels1 + labels2 + ["Windrichtung"],
+        loc="upper left"
     )
     ax1.set_title(
         f"Wetter am Fangort ({latitude:.5f}, {longitude:.5f})",
         fontsize=11,
-        loc='left',
+        loc="left",
         pad=10
     )
 
@@ -691,7 +711,7 @@ def generate_catch_report(date: str,
     ax_rain.axvspan(
         catchtime_start,
         catchtime_ende,
-        color='gold',
+        color="gold",
         alpha=0.18,
         zorder=3
     )
@@ -700,9 +720,9 @@ def generate_catch_report(date: str,
         ax_rain.axvspan(
             forecast_start,
             plot_end,
-            color='gray',
+            color="gray",
             alpha=0.12,
-            hatch='//',
+            hatch="//",
             zorder=3
         )
 
@@ -729,21 +749,21 @@ def generate_catch_report(date: str,
     )
 
     # --- DIAGRAMM 3: WASSERSTAND ---
-    color_pegel = '#2980b9'
+    color_pegel = "#2980b9"
     ax3.plot(
-        df_water_level.index, df_water_level['Wasserstand'],
+        df_water_level.index, df_water_level["water_level"],
         color=color_pegel,
         linewidth=2.5,
-        label=f'Pegel {station_display_name} (cm)'
+        label=f"Pegel {station_display_name} (cm)"
     )
-    ax3.set_ylabel('Wasserstand (cm)', color=color_pegel, fontweight='bold')
-    ax3.tick_params(axis='y', labelcolor=color_pegel)
-    ax3.grid(True, linestyle=':', alpha=0.6)
+    ax3.set_ylabel("Wasserstand (cm)", color=color_pegel, fontweight="bold")
+    ax3.tick_params(axis="y", labelcolor=color_pegel)
+    ax3.grid(True, linestyle=":", alpha=0.6)
 
     ax3.axvspan(
         catchtime_start,
         catchtime_ende,
-        color='gold',
+        color="gold",
         alpha=0.18
     )
 
@@ -751,23 +771,23 @@ def generate_catch_report(date: str,
         ax3.axvspan(
             forecast_start,
             plot_end,
-            color='gray',
+            color="gray",
             alpha=0.12,
-            hatch='//'
+            hatch="//"
         )
 
     ax3.set_title(
         f"{water}-Pegel {station_display_name}",
         fontsize=11,
-        loc='left',
+        loc="left",
         pad=10
     )
-    ax3.legend(loc='upper left')
+    ax3.legend(loc="upper left")
 
     # Formatiere die gemeinsame X-Achse (Zeitachse)
-    ax3.set_xlabel('Datum / Uhrzeit', fontweight='bold', labelpad=10)
+    ax3.set_xlabel("Datum / Uhrzeit", fontweight="bold", labelpad=10)
     ax3.set_xlim(plot_start, plot_end)
-    ax3.xaxis.set_major_formatter(mdates.DateFormatter('%d.%m.\n%H:%M'))
+    ax3.xaxis.set_major_formatter(mdates.DateFormatter("%d.%m.\n%H:%M"))
     ax3.xaxis.set_major_locator(mdates.HourLocator(interval=12))  # Alle 12 Stunden ein Marker
     plt.xticks(rotation=0)
 
@@ -780,22 +800,25 @@ def generate_catch_report(date: str,
         hspace=0.25
     )
 
-    report_location = "./Fänge"
-    if not os.path.exists(report_location):
-        os.makedirs(report_location)
+    if report_location:
+        if not os.path.exists(report_location):
+            os.makedirs(report_location)
 
-    pdf_path = f"{report_location}/fang_report_{date}_{station_display_name.lower().replace(' ', '_')}.pdf"
-    create_pdf_report(
-        pdf_path=pdf_path,
-        plot_figure=fig,
-        report_data=report_data,
-        summary_items=summary_items,
-        photo_path=photo_path,
-        notes = notes
-    )
+        pdf_path = f"{report_location}/fang_report_{date}_{station_display_name.lower().replace(" ", "_")}.pdf"
+        create_pdf_report(
+            pdf_path=pdf_path,
+            plot_figure=fig,
+            report_data=report_data,
+            summary_items=summary_items,
+            photo_path=photo_path,
+            notes = notes
+        )
 
-    print(f"-> PDF wurde erstellt: {pdf_path}")
-    print("-> Diagramm-Fenster wird geöffnet.")
+        print(f"-> PDF wurde erstellt: {pdf_path}")
+        print("-> Diagramm-Fenster wird geöffnet.")
+
+    else:
+        print("Kein Speicherort gegeben. PDF kann nicht erstellt werden.")
 
 
 def create_pdf_report(
@@ -857,7 +880,7 @@ def create_pdf_report(
         header_axis.text(
             0.03,
             0.25,
-            f"{report_data.get('Gewässer', '')} · {report_data.get('Datum', '')} · {report_data.get('Fangzeit', '')}",
+            f"{report_data.get("water", "")} · {report_data.get("catch_date", "")} · {report_data.get("catch_time", "")}",
             color="#dbe9f6",
             fontsize=10,
             va="center"
@@ -865,18 +888,18 @@ def create_pdf_report(
 
         fish_details = []
 
-        if report_data.get("Länge") != "Keine Daten":
-            fish_details.append(report_data["Länge"])
+        if report_data.get("fish_length") != "Keine Daten":
+            fish_details.append(report_data["fish_length"])
 
-        if report_data.get("Gewicht") != "Keine Daten":
-            fish_details.append(report_data["Gewicht"])
+        if report_data.get("fish_weight") != "Keine Daten":
+            fish_details.append(report_data["fish_weight"])
 
         fish_measurements = " · ".join(fish_details)
 
         header_axis.text(
             0.97,
             0.62,
-            report_data.get("Fischart", ""),
+            report_data.get("species", ""),
             fontsize=18,
             fontweight="bold",
             color="white",
@@ -998,13 +1021,13 @@ def create_pdf_report(
         sketch_axis = report_figure.add_axes((0.06, content_y, 0.42, content_height))
         sketch_axis.set_facecolor("white")
         title_obj = sketch_axis.set_title(
-            f"Angelplatz ({report_data.get('Fangort', 'Keine Daten')}) ↗",
+            f"Angelplatz ({report_data.get("catch_location", "Keine Daten")}) ↗",
             loc="left",
             fontsize=12,
             fontweight="bold",
             pad=10
         )
-        title_obj.set_url(report_data.get("Fangort-Link"))
+        title_obj.set_url(report_data.get("catch_link"))
         sketch_axis.set_xticks([])
         sketch_axis.set_yticks([])
 

@@ -1,0 +1,26 @@
+[build-system]
+requires = ["setuptools", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "Fangreport"
+version = "2026.1.0"
+description = "Ein Tool zum erstellen von Fangreporten für Angler"
+readme = "README.md"
+requires-python = ">=3.8"
+dependencies = [
+    "numpy",
+    "scipy",
+    "pandas",
+    "requests",
+    "pip-system-certs",  # Nutzt die SSL-Zertifikate des Betriebssystems
+    "matplotlib",
+    "typer",
+    "pillow",
+]
+
+[dependency-groups]
+dev = [
+    "pip-tools",
+    "pytest"
+]

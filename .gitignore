@@ -1,4 +1,34 @@
-fangreport/data/aipo_auth.json
+# --- Virtuelle Umgebungen ---
+venv/
+.venv/
+env/
+ENV/
+
+# --- Python Cache & Kompilate ---
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# --- Test- & Coverage-Berichte ---
+.coverage
+htmlcov/
+*.lprof
+
+# --- IDEs und Editoren ---
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# --- Betriebssystem-Dateien ---
+.DS_Store
+Thumbs.db
+
+# --- sensible Daten ---
 .env
-*.token
-*.pdf
+fangreport/data/aipo_auth.json
+fang_report*.pdf

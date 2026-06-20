@@ -4,6 +4,10 @@ from fangreport.core import generate_catch_report
 
 app = typer.Typer()
 
+"""
+Client zum Erstellen eines Fangreports über die Konsole.
+"""
+
 @app.command()
 def main(
     date: str = typer.Option(
@@ -54,7 +58,7 @@ def main(
             "Wenn nicht angegeben, wird versucht, sie über PEGELONLINE abzurufen."
         )
     ),
-    water_turbidity: str = typer.Option(
+    water_clarity: str = typer.Option(
         "Keine Daten",
         "--Trübung",
         help="Beschreibung der Trübung, z. B. 'klar' oder 'leicht eingetrübt'"
@@ -96,7 +100,7 @@ def main(
             species,
             fish_length,
             fish_weight,
-            water_turbidity,
+            water_clarity,
             photo_path,
             notes
         )

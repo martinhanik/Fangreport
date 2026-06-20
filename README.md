@@ -120,5 +120,5 @@ Dabei werden die Daten aller fett geschriebenen Stationen über das
 [Portal](https://idrometri.agenziapo.it/Aegis/map/map2d) der *Agenzia Interregionale per il fiume Po (AIPO)* geladen. 
 Hierfür braucht es einen gültigen Refresh-Token und eine gültige Client-ID. Diese müssen bei der ersten Nutzung oder 
 wenn längere Zeit kein Fangreport erstellt wurde aus einem Browser geladen werden. Man findet sie nach dem Öffnen der 
-Seite in den Webinformationen des Entwicklertools. Anschließend müssen die Daten in der JSON-Datei ``aipo_auth.json`` 
+Seite unter dem Reiter „Webinformationen“ des Entwicklertools im lokalen Speicher. Anschließend müssen die Daten in der JSON-Datei ``aipo_auth.json`` 
 in ``fangreport/data`` gespeichert werden. Als Vorlage dient ``aipo_auth_example.json``, das im selben Ordner liegt. 

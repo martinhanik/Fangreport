@@ -7,6 +7,9 @@ from fangreport.core import generate_catch_report
 
 
 class FangreportApp(tk.Tk):
+    """
+    GUI zur Erstellung eines Fangreports.
+    """
     def __init__(self):
         super().__init__()
 
@@ -335,7 +338,7 @@ class FangreportApp(tk.Tk):
         self.status_var.set("Fangreport wurde erfolgreich erstellt.")
         messagebox.showinfo(
             "Fangreport erstellt",
-            "Der Fangreport wurde erfolgreich erstellt und im Ordner „Fänge“ gespeichert."
+            "Der Fangreport wurde erfolgreich erstellt und im Ordner „fänge“ gespeichert."
         )
 
     def _report_failed(self, message):
