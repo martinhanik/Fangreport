@@ -20,7 +20,7 @@ Installieren Sie [git](https://git-scm.com) auf dem Computer.
 Klonen Sie das Repository in einen lokalen Ordner, indem sie diesen im Terminal öffnen und folgenden Befehl eingeben:
 
 ```
-git clone git@github.com:martinhanik/Fangbuch.git
+https://github.com/martinhanik/Fangreport.git
 ```
 
 Gehen Sie nun in das Repository. Wurde dieses unter dem Standard-Ordnernamen angelegt, lautet der Befehl:
