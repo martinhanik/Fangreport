@@ -1,3 +1,8 @@
+# Copyright (c) 2026 Martin Hanik
+#
+# This source code is licensed under the MIT license found in the
+# LICENSE file in the root directory of this source tree.
+
 import typer
 from datetime import datetime
 from fangreport.core import generate_catch_report

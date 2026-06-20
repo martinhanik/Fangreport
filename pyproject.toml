@@ -5,6 +5,14 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "Fangreport"
 version = "2026.1.0"
+authors = [
+    { name = "Martin Hanik", email = "martinhanik@web.de" }
+]
+license = { text = "MIT" }
+classifiers = [
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+]
 description = "Ein Tool zum erstellen von Fangreporten für Angler"
 readme = "README.md"
 requires-python = ">=3.8"

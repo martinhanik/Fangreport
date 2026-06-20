@@ -114,3 +114,7 @@ Hierfür braucht es einen gültigen Refresh-Token und eine gültige Client-ID. D
 wenn längere Zeit kein Fangreport erstellt wurde aus einem Browser geladen werden. Man findet sie nach dem Öffnen der 
 Seite unter dem Reiter „Webinformationen“ des Entwicklertools im lokalen Speicher. Anschließend müssen die Daten in der JSON-Datei ``aipo_auth.json`` 
 in ``fangreport/data`` gespeichert werden. Als Vorlage dient ``aipo_auth_example.json``, das im selben Ordner liegt. 
+
+## Lizenz
+
+Dieses Projekt ist unter der MIT-Lizenz lizenziert. Weitere Informationen finden Sie in der Datei [LICENSE](LICENSE).
