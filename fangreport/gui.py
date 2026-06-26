@@ -60,7 +60,7 @@ class FangreportApp(tk.Tk):
             ("Zeit", "HH:MM", True),
             ("Breiten- und Längengrad", "z. B. 49.357599616156776, 8.494281048199765", True),
             ("Pegelstation", "z. B. Speyer", True),
-            ("Wassertemperatur", "optional, °C", False),
+            ("Wassertemperatur", "°C, z. B. 12.5", False),
             ("Trübung", "z. B. klar", False),
         ]
 
@@ -224,7 +224,7 @@ class FangreportApp(tk.Tk):
         time_of_catch = self._get_entry_value("Zeit")
         species = self._get_entry_value("Fischart")
         station = self._get_entry_value("Pegelstation")
-        water_turbidity = self._get_entry_value("Trübung") or "Keine Daten"
+        water_clarity = self._get_entry_value("Trübung") or "Keine Daten"
         photo_path = self.photo_path_var.get().strip() or None
         notes = self.notes_text.get("1.0", tk.END).strip()
 
@@ -239,7 +239,7 @@ class FangreportApp(tk.Tk):
             raise ValueError("Die Zeit muss im Format HH:MM eingegeben werden.") from exc
 
         try:
-            c = self._get_entry_value("Längen- und Breitengrad").split(",")
+            c = self._get_entry_value("Breiten- und Längengrad").split(",")
 
             if len(c) != 2:
                 raise ValueError("Es müssen genau zwei Werte angegeben werden.")
@@ -301,7 +301,7 @@ class FangreportApp(tk.Tk):
             "species": species,
             "fish_length": fish_length,
             "fish_weight": fish_weight,
-            "water_turbidity": water_turbidity,
+            "water_clarity": water_clarity,
             "photo_path": photo_path,
             "notes": notes,
         }
