@@ -51,7 +51,7 @@ def load_german_station_data():
     return pegel_dict
 
 
-def load_italian_station_data(station, start, end, water_temperature_at_catch):
+def load_italian_station_data(station, start, end):
     """
     Ruft Daten von der ARPA Lombardia API oder dem Portal der AIPO ab und gibt ein Dictionary mit Stationsinformationen
     zurück.
@@ -106,7 +106,6 @@ def load_italian_station_data(station, start, end, water_temperature_at_catch):
         "station_display_name": station_data["display_name"],
         "water": station_data["water"],
         "df_water_level": df_water_level,
-        "water_temperature_at_catch": water_temperature_at_catch,
         "source": source,
     }
 

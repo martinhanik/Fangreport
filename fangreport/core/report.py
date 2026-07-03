@@ -242,8 +242,7 @@ def generate_catch_report(date: str,
     italian_station_result = load_italian_station_data(
         station,
         start,
-        end,
-        water_temperature_at_catch
+        end
     )
 
     station_number = None
@@ -268,7 +267,6 @@ def generate_catch_report(date: str,
         water = italian_station_result["water"]
         station_display_name = italian_station_result["station_display_name"]
         station_source = italian_station_result["source"]
-        water_temperature_at_catch = italian_station_result["water_temperature_at_catch"]
 
     print(f"--- GENERIERE GRAFISCHEN ANGEL-REPORT ---")
     print(f"Zeitraum: {start_date} bis {end_date}")
@@ -455,7 +453,7 @@ def generate_catch_report(date: str,
 
             MetricTile(
                 "Wasser",
-                report_data.get("Wassertemperatur", "Keine Daten")
+                report_data.get("water_temperature", "Keine Daten")
             ),
 
             MetricTile(
