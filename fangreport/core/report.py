@@ -22,7 +22,20 @@ from PIL import Image
 from fangreport.data_loading.water_level import load_italian_station_data, load_german_station_data
 
 
-def describe_weather_code(code):
+def describe_weather_code(code: int | str) -> str:
+    """
+    Provides a mapping from weather codes to their corresponding weather descriptions
+    in German. If a code is not recognized, a default message including the unknown code
+    is returned.
+
+    :param code: Weather code corresponding to a specific weather description
+                 (e.g., 0 for "Klar"). The code is expected to be convertible to an integer.
+    :type code: int or str
+    :return: The German description of the weather condition matching the provided
+             weather code. If the code is unrecognized, it returns a default string
+             in the format "Unbekannt (<code>)".
+    :rtype: str
+    """
     weather_codes = {
         0: "Klar",
         1: "Überwiegend klar",
@@ -56,7 +69,20 @@ def describe_weather_code(code):
     return weather_codes.get(int(code), f"Unbekannt ({code})")
 
 
-def calculate_moon_phase(date_time):
+def calculate_moon_phase(date_time: datetime):
+    """
+    Calculate the phase of the moon for a given date and time.
+
+    This function determines the current phase of the moon based on the number
+    of days elapsed since a reference new moon and compares it to the synodic
+    month (the mean duration between new moons). The moon phase is returned
+    as one of numerous descriptive states (e.g., "Neumond" or "Vollmond").
+
+    :param date_time: The date and time for which to calculate the moon phase.
+    :type date_time: datetime.datetime
+    :return: The moon phase corresponding to the provided date and time.
+    :rtype: str
+    """
     reference_new_moon = datetime(2000, 1, 6, 18, 14)
     synodic_month = 29.53058867
 
@@ -82,7 +108,33 @@ def calculate_moon_phase(date_time):
     return "Neumond"
 
 
-def get_nearest_value(data_frame, date_time, column):
+def get_nearest_value(
+        data_frame: pandas.DataFrame,
+        date_time: datetime.datetime | pandas.Timestamp,
+        column: str
+) -> Any:
+    """
+    Retrieves the value from a specific column in a DataFrame that corresponds
+    to the row with the nearest index to the given datetime.
+
+    The function checks if the DataFrame is valid, non-empty, and contains the
+    specified column. If any of these conditions are not met, it returns None.
+    Otherwise, it identifies the row index closest to the provided datetime
+    and retrieves the value in the specified column.
+
+    :param data_frame: Pandas DataFrame from which the value will be retrieved.
+                       It must contain the specified column and a properly
+                       formatted index for comparison with the given datetime.
+    :type data_frame: pandas.DataFrame
+    :param date_time: The datetime object to find the nearest row index for.
+    :type date_time: pandas.Timestamp or datetime.datetime
+    :param column: The name of the column to retrieve the value from.
+    :type column: str
+    :return: The value in the specified column corresponding to the row with
+             the nearest index to the given datetime. Returns None if the
+             DataFrame is invalid, empty, or the column does not exist.
+    :rtype: Any
+    """
     if data_frame is None or data_frame.empty or column not in data_frame.columns:
         return None
 
@@ -91,6 +143,17 @@ def get_nearest_value(data_frame, date_time, column):
 
 
 def format_value(value, unit="", decimals=1):
+    """
+    Formats a given numerical value into a string representation, including optional unit and
+    decimals for precision. Handles missing or invalid data by returning a predefined string.
+
+    :param value: The numerical or string value to be formatted. It can also be None or NaN.
+    :param unit: Optional. A string representing the unit to append to the formatted value.
+    :param decimals: An integer specifying the number of decimal places to include
+        when formatting numerical values.
+    :return: A formatted string with the numerical value, optional unit, and specified precision.
+        If the value is None or NaN, returns "Keine Daten".
+    """
     if value is None or pd.isna(value):
         return "Keine Daten"
 
@@ -100,7 +163,20 @@ def format_value(value, unit="", decimals=1):
     return f"{value:.{decimals}f} {unit}".strip()
 
 
-def wind_direction_arrow(deg):
+def wind_direction_arrow(deg: float | str | None) -> str:
+    """
+    Converts a wind direction in degrees into a corresponding arrow symbol that indicates
+    the blowing direction. If the input is invalid or no data is provided,
+    an empty string is returned.
+
+    :param deg: The wind direction in degrees as a numeric value or a string.
+                Possible invalid values include `None` or the string "Keine Daten".
+    :type deg: float | str | None
+    :return: A string representing the arrow symbol in the blowing direction
+             corresponding to the provided wind direction. If the input is invalid,
+             returns an empty string.
+    :rtype: str
+    """
     if deg is None or deg == "Keine Daten":
         return ""
 
@@ -111,11 +187,31 @@ def wind_direction_arrow(deg):
 
     arrows = ["↑", "↗", "→", "↘", "↓", "↙", "←", "↖"]
 
-    # Drehe um 180° für Pfeil in Blasrichtung
+    # Rotate by 180° for an arrow that points into the direction in which the wind blows (and not where it comes from)
     return arrows[((round(deg / 45) % 8) + 4) % 8]
 
 
-def trend_arrow(slope, threshold):
+def trend_arrow(slope: float | None, threshold: float) -> str:
+    """
+    Determines the appropriate arrow symbol to represent a trend based on the slope value
+    and a specified threshold. The function returns an upward arrow if the slope exceeds
+    the threshold, a downward arrow if the slope is less than the negative of the
+    threshold, and a rightward arrow if the slope lies within the threshold range.
+
+    :param slope: The slope value used to determine the trend. Can be None or convertible
+        to a float.
+    :type slope: float or None
+    :param threshold: The threshold value against which the slope is compared. Should be
+        a positive float.
+    :type threshold: float
+    :return: A string representing the trend arrow corresponding to the slope. Returns
+        an empty string if the slope is None or invalid. The possible return values are:
+        - "↗" (upward arrow) for a positive trend exceeding the threshold.
+        - "↘" (downward arrow) for a negative trend below the negative threshold.
+        - "→" (rightward arrow) for a neutral trend within the threshold range.
+        - "" (empty string) for invalid or None slope.
+    :rtype: str
+    """
     if slope is None:
         return ""
 
@@ -131,22 +227,39 @@ def trend_arrow(slope, threshold):
     return "→"
 
 
-def MetricTile(label, value, meta=None):
+def MetricTile(label: str, value: str | float, meta: Optional = None) -> tuple[str, str, str]:
     """
-    meta kann enthalten:
-    - unit
-    - trend (slope: float)
-    - direction (degrees)
-    - threshold
-    - color_mode
+    Creates and formats a metric tile for display.
+
+    The function takes a label, a value, and optional metadata to generate a
+    metric tile, including conditional modifications to the display based on
+    the metadata, such as visual indicators for trends, directions, and colors.
+
+    :param label:
+        A string representing the title or name of the metric.
+
+    :param value:
+        A numeric or string value representing the metric value to be displayed.
+
+    :param meta:
+        Optional. A dictionary containing additional metadata. This can include:
+        - "direction": A value for describing a directional indication (e.g., wind direction).
+        - "trend": A numeric slope value for describing trends.
+        - "threshold": A numeric value used as a threshold to determine trend-based color.
+
+    :return:
+        A tuple of three items:
+        - The provided label (str).
+        - A formatted display value (str) including directional or trend arrows if applicable.
+        - A color (str), represented as a hexadecimal string, determined by the trend threshold.
     """
 
     meta = meta or {}
 
-    # 1. Basiswert
+    # 1. Base value
     display_value = value
 
-    # 2. Windrichtung
+    # 2. Wind direction
     if meta.get("direction") is not None:
         display_value = f"{value} {wind_direction_arrow(meta["direction"])}"
 
@@ -157,59 +270,80 @@ def MetricTile(label, value, meta=None):
         arrow = trend_arrow(slope, threshold)
         display_value = f"{value} {arrow}"
 
-    # 4. Farbe optional
+    # 4. Optional color
     color = "#111827"
 
     if "trend" in meta and meta["trend"] is not None:
         slope = float(meta["trend"])
         threshold = np.abs(meta.get("threshold"))
         if slope > threshold:
-            color = "#16a34a"   # grün
+            color = "#16a34a"   # green
         elif slope < -threshold:
-            color = "#dc2626"   # rot
+            color = "#dc2626"   # red
         else:
             color = "#6b7280"
 
     return label, display_value, color
 
 
-def generate_catch_report(date: str,
-                          time_of_catch: str,
-                          station: str,
-                          latitude: float,
-                          longitude: float,
-                          water_temperature_at_catch: float | None,
-                          species: str,
-                          fish_length: float | None,
-                          fish_weight: float | None,
-                          water_clarity: str,
-                          photo_path: str | None = None,
-                          notes: str = "",
-                          n_days_past: int = 3,
-                          n_days_future: int = 1,
-                          report_location: str | None = "./fänge"):
+def generate_catch_report(
+        date: str,
+        time_of_catch: str,
+        station: str,
+        latitude: float,
+        longitude: float,
+        water_temperature_at_catch: float | None,
+        species: str,
+        fish_length: float | None,
+        fish_weight: float | None,
+        water_clarity: str,
+        photo_path: str | None = None,
+        notes: str = "",
+        n_days_past: int = 3,
+        n_days_future: int = 1,
+        report_location: str | None = "./fänge"
+) -> None:
     """
-    Generiert einen Fangreport und speichert in PDF.
+    Generate a detailed report related to a fishing catch event, including weather data, water levels, and catch details.
+    The function gathers weather and hydrological data for a specified time period and location,
+    validates input parameters, processes the relevant data, and generates a comprehensive fishing report.
 
-    :param date: Fangdatum im Format YYYY-MM-DD
-    :param time_of_catch: Fangzeit im Format HH:MM
-    :param station: Pegelstelle (PEGELONLINE-ID oder Name einer italienischen Station)
-    :param latitude: Breitengrad des Fangorts
-    :param longitude: Längengrad des Fangorts
-    :param water_temperature_at_catch: Wassertemperatur am Fangort
-    :param species: Fischart
-    :param fish_length: Fischlänge
-    :param fish_weight: Fischgewicht
-    :param water_clarity: Wassertrübung
-    :param photo_path: Pfad zur Fotografie, optional
-    :param notes: Anmerkungen zum Fang
-    :param n_days_past: Anzahl der angezeigten Tage vor dem Fangdatum
-    :param n_days_future: Anzahl der angezeigten Tage nach dem Fangdatum
-    :param report_location: Speicherort des Fangreports, „None“ sollte nur für Tests verwendet werden.
+    :param date: Date of the fishing event in the format YYYY-MM-DD (e.g., 2026-05-17).
+    :type date: str
+    :param time_of_catch: Time of the catch in the format HH:MM (e.g., 18:30).
+    :type time_of_catch: str
+    :param station: Identifier of the water observation station (e.g., PEGELONLINE or supported Italian station).
+    :type station: str
+    :param latitude: Latitude of the fishing location.
+    :type latitude: float
+    :param longitude: Longitude of the fishing location.
+    :type longitude: float
+    :param water_temperature_at_catch: Water temperature at the catch time, if available.
+    :type water_temperature_at_catch: float | None
+    :param species: Species of the fish caught (e.g., Wels, Hecht).
+    :type species: str
+    :param fish_length: Length of the fish caught in centimeters, if known.
+    :type fish_length: float | None
+    :param fish_weight: Weight of the fish caught in kilograms, if known.
+    :type fish_weight: float | None
+    :param water_clarity: Clarity of the water at the fishing location, described qualitatively (e.g., Klar, Trüb).
+    :type water_clarity: str
+    :param photo_path: File path or URL for the photo of the fish caught, if available.
+    :type photo_path: str | None
+    :param notes: Additional notes or remarks about the fishing event.
+    :type notes: str
+    :param n_days_past: Number of days before the catch date to include in the data report. Default is 3.
+    :type n_days_past: int
+    :param n_days_future: Number of days after the catch date to include in the data report. Default is 1.
+    :type n_days_future: int
+    :param report_location: Directory path where the generated report will be saved.
+        Default is "./fänge".
+    :type report_location: str | None
+    :return: None. The function creates a graphical fishing report but does not return any value.
+    :rtype: None
     """
-    # 1. KONFIGURATION
+    # 1. CONFIGURATION
 
-    # Zeitraum um das Fangdatum herum
     today = datetime.now()
 
     try:
@@ -258,7 +392,7 @@ def generate_catch_report(date: str,
                 "Bitte gib eine gültige PEGELONLINE-Pegelstelle oder eine unterstützte italienische Station an."
             )
 
-        # Verifizierte PEGELONLINE-Pegelstation
+        # Verified PEGELONLINE-Pegelstation
         station_number = station_data["number"]
         water = station_data["water"]
         station_display_name = station.title()
@@ -273,9 +407,9 @@ def generate_catch_report(date: str,
     print(f"Pegelquelle: {station_source}\n")
 
     # ==========================================
-    # 2. DATENABRUF (Wetter & Pegel)
+    # 2. Collecting Data (Weather & Water Level)
     # ==========================================
-    # Wetterdaten abrufen
+    # Obtain weather data
     weather_url = "https://archive-api.open-meteo.com/v1/era5"
     weather_params = {
         "latitude": latitude,
@@ -294,7 +428,7 @@ def generate_catch_report(date: str,
         "timezone": "Europe/Berlin"
     }
 
-    # Pegeldaten abrufen
+    # Obtain water level
     pegel_start = start.isoformat()
     if italian_station_result is None:
         pegel_url = f"https://www.pegelonline.wsv.de/webservices/rest-api/v2/stations/{station_number}/W/measurements.json"
@@ -323,7 +457,7 @@ def generate_catch_report(date: str,
         except ValueError as e:
             raise RuntimeError(f"{description}: Ungültige JSON-Antwort: {e}") from e
 
-    # 2a. Wetter abrufen & verarbeiten
+    # 2a. Weather
     try:
         print("[1/2] Rufe Wetterdaten von Open-Meteo ab...")
         weather_json = load_json(weather_url, weather_params, "Wetterdaten")
@@ -354,7 +488,7 @@ def generate_catch_report(date: str,
         df_weather.index = remove_timezone(df_weather.index)
         df_weather = df_weather.loc[(df_weather.index >= plot_start) & (df_weather.index <= plot_end)]
 
-        # 2b. Pegel abrufen & verarbeiten
+        # 2b. Water level
         print(f"[2/2] Rufe Pegeldaten für Station {station_display_name} ab...")
 
         if italian_station_result is None:
@@ -374,7 +508,7 @@ def generate_catch_report(date: str,
                 & (df_water_level.index <= plot_end)
             ]
 
-        # Setze falsche Werte auf None
+        # Set wrong values to None
         df_water_level["water_level"] = df_water_level["water_level"].astype("Float64")
 
         cond = np.abs(df_water_level["water_level"]) > 10 ** 5
@@ -414,14 +548,14 @@ def generate_catch_report(date: str,
         }
 
         def slope_of_trend(df, keyword, timeframe_m: int = 360):
-            # Berechne den Anstieg einer äquidistanten Zeitreihe in den letzten timeframe_m Minuten.
+            # Calculate tagent to equidistant time series in the last timeframe_m minutes.
             time_delta_m = (df.index[1] - df.index[0]).to_numpy().astype("timedelta64[m]").astype(int)
             ind_timeframe_ago = timeframe_m // time_delta_m
 
             nearest_index = df.index.get_indexer([catch_datetime], method="nearest")[0]
             recent_level = df[keyword].to_numpy()[nearest_index - ind_timeframe_ago: nearest_index]
 
-            # Berechne stündlichen Anstieg
+            # Calculate hourly tangent
             time_delta_h = time_delta_m / 60
             timeframe_h = int(timeframe_m / 60)
             slope = stats.linregress(np.arange(0, timeframe_h, time_delta_h), recent_level)[0]
@@ -509,9 +643,9 @@ def generate_catch_report(date: str,
 
 
     # ==========================================
-    # 3. GRAFISCHE VISUALISIERUNG (Matplotlib)
+    # 3. Visualization (Matplotlib)
     # ==========================================
-    # Erstelle zwei Subplots untereinander mit geteilter X-Achse
+    # Create two Subplots with shared X-Achse
     fig, (ax1, ax_rain, ax3) = plt.subplots(
         3,
         1,
@@ -528,8 +662,6 @@ def generate_catch_report(date: str,
         fontweight="bold"
     )
 
-    # Hilfsfunktion: Wolkenbedeckung im Regenplot als Hintergrund darstellen.
-    # 0 % = hellblau, 100 % = grau.
     def draw_cloud_cover_background(axis):
         if "cloud_cover" not in df_weather.columns or df_weather.empty:
             return
@@ -555,7 +687,7 @@ def generate_catch_report(date: str,
                 zorder=0
             )
 
-    # --- DIAGRAMM 1: WETTER (Temperatur & Luftdruck & Wind) ---
+    # --- DIAGRAM 1: WEATHER ---
     color_temp = "#e74c3c"
     ax1.plot(df_weather.index, df_weather["temperature"], color=color_temp, linewidth=2, label="Temperatur (°C)")
     ax1.set_ylabel("Temperatur / Wind", color=color_temp, fontweight="bold")
@@ -621,7 +753,7 @@ def generate_catch_report(date: str,
         }
     )
 
-    # Zweite Y-Achse für den Luftdruck
+    # Second Y-axis for the air pressure
     ax2 = ax1.twinx()
     color_press = "#2980b9"
     ax2.plot(df_weather.index, df_weather["air_pressure"], color=color_press, linewidth=2, linestyle="--",
@@ -630,16 +762,15 @@ def generate_catch_report(date: str,
     ax2.set_ylim(970, 1045)
     ax2.tick_params(axis="y", labelcolor=color_press)
 
-    # Windstärke flächig im Hintergrund
+    # Wind speed in the background
     color_wind = "#2ecc71"
     ax1.fill_between(df_weather.index, df_weather["wind"], alpha=0.15, color=color_wind, label="Wind (km/h)")
 
-    # Windrichtung als Pfeile anzeigen
-    wind_sample = df_weather.iloc[::6].copy()  # alle 6 Stunden ein Pfeil
+    # Wind direction
+    wind_sample = df_weather.iloc[::6].copy()  # every 6 hours an arrow
     wind_rad = np.deg2rad(wind_sample["wind_direction"])
 
-    # Meteorologische Windrichtung: Richtung, aus der der Wind kommt.
-    # Für die Pfeile drehen wir sie um 180°, damit sie in die Blasrichtung zeigen.
+    # Must rotate the arrows by 180°
     u = np.sin(wind_rad + np.pi)
     v = np.cos(wind_rad + np.pi)
 
@@ -659,7 +790,7 @@ def generate_catch_report(date: str,
         alpha=0.8,
     )
 
-    # Eigener Legendeneintrag für Windrichtung als Pfeil
+    # Entry in legend for wind direction
     wind_direction_handle = Line2D(
         [],
         [],
@@ -670,7 +801,7 @@ def generate_catch_report(date: str,
         label="Windrichtung"
     )
 
-    # Legenden des oberen Plots zusammenführen
+    # Combine legends of upper plots
     lines1, labels1 = ax1.get_legend_handles_labels()
     lines2, labels2 = ax2.get_legend_handles_labels()
 
@@ -686,7 +817,7 @@ def generate_catch_report(date: str,
         pad=10
     )
 
-    # --- DIAGRAMM 2: REGEN & WOLKENBEDECKUNG ---
+    # --- DIAGRAM 2: RAIN & CLOUD COVER ---
     draw_cloud_cover_background(ax_rain)
 
     color_rain = "#3498db"
@@ -751,7 +882,7 @@ def generate_catch_report(date: str,
         pad=10
     )
 
-    # --- DIAGRAMM 3: WASSERSTAND ---
+    # --- DIAGRAM 3: WATER LEVEL ---
     color_pegel = "#2980b9"
     ax3.plot(
         df_water_level.index, df_water_level["water_level"],
@@ -787,14 +918,12 @@ def generate_catch_report(date: str,
     )
     ax3.legend(loc="upper left")
 
-    # Formatiere die gemeinsame X-Achse (Zeitachse)
     ax3.set_xlabel("Datum / Uhrzeit", fontweight="bold", labelpad=10)
     ax3.set_xlim(plot_start, plot_end)
     ax3.xaxis.set_major_formatter(mdates.DateFormatter("%d.%m.\n%H:%M"))
     ax3.xaxis.set_major_locator(mdates.HourLocator(interval=12))  # Alle 12 Stunden ein Marker
     plt.xticks(rotation=0)
 
-    # Layout optimieren und Diagramm anzeigen
     fig.subplots_adjust(
         left=0.08,
         right=0.92,
@@ -832,6 +961,30 @@ def create_pdf_report(
     photo_path=None,
     notes=""
 ):
+    """
+    Generates a PDF report that includes details about a fishing catch, summary items,
+    a sketch section, and a photo section. This function uses matplotlib to render
+    various components of the report, such as headers, cards, notes, and images.
+
+    :param pdf_path: The file path where the output PDF report will be saved.
+    :type pdf_path: str
+    :param plot_figure: An existing matplotlib figure that will be included in the report.
+    :type plot_figure: matplotlib.figure.Figure
+    :param report_data: A dictionary containing details about the catch (species,
+        measurements, location, date, and time) required to customize the report.
+    :type report_data: dict
+    :param summary_items: A list of tuples, where each tuple contains a summary label,
+        corresponding value, and a color for rendering the summary cards.
+    :type summary_items: list[tuple]
+    :param photo_path: The file path to an optional photo that will be embedded in the
+        photo section of the report. Default is None.
+    :type photo_path: str, optional
+    :param notes: Optional text to be included in the notes section of the report.
+        Default is an empty string.
+    :type notes: str, optional
+    :return: None. The function generates a PDF file at the specified location.
+    :rtype: None
+    """
 
     PAGE_TOP = 0.95
     PAGE_BOTTOM = 0.05
@@ -971,7 +1124,7 @@ def create_pdf_report(
 
         content_y = content_bottom
 
-        # Notizen rechts
+        # Notes on the right
         notes_axis = report_figure.add_axes((0.52, content_y, 0.42, content_height))
         notes_axis.set_facecolor("white")
         notes_axis.set_title("Notizen", loc="left", fontsize=12, fontweight="bold", pad=10)
@@ -1020,7 +1173,7 @@ def create_pdf_report(
                 transform=notes_axis.transAxes
             )
 
-        # Freie Fläche für Skizze unterhalb der Fangdaten
+        # Empty space for a drawing
         sketch_axis = report_figure.add_axes((0.06, content_y, 0.42, content_height))
         sketch_axis.set_facecolor("white")
         title_obj = sketch_axis.set_title(
@@ -1050,7 +1203,7 @@ def create_pdf_report(
             transform=sketch_axis.transAxes
         )
 
-        # Foto-Bereich unten über die volle Breite
+        # Foto space
         photo_axis = report_figure.add_axes((0.06, photo_bottom, 0.88, photo_height))
         photo_axis.set_facecolor("white")
         photo_axis.set_title("Foto", loc="left", fontsize=12, fontweight="bold", pad=10)

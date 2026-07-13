@@ -10,7 +10,7 @@ from fangreport.core import generate_catch_report
 app = typer.Typer()
 
 """
-Client zum Erstellen eines Fangreports über die Konsole.
+Client to create a catch report via the command line.
 """
 
 @app.command()

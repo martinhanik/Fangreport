@@ -6,23 +6,21 @@ import unicodedata
 
 from fangreport.data_loading import AipoClient
 
-def load_german_station_data():
+def load_german_station_data() -> dict:
     """
-    Ruft Daten von der Pegel Online API ab und gibt ein Dictionary mit Stationsinformationen zurück.
+    Loads and processes data from the German water levels API into a structured dictionary format.
+    This utility retrieves station information available through a REST API endpoint, specifically
+    tailored for water level monitoring. The resulting data only includes stations with valid names.
 
-    Die Funktion ruft eine Liste von Wasserstandsstationen im JSON-Format von der Pegel Online API ab.
-    Sie verarbeitet die Daten, um ein Dictionary zu erstellen, bei dem die Schlüssel die Langnamen
-    der Stationen sind und die entsprechenden Werte Dictionaries enthalten, die Stationsdetails wie
-    Stationsnummer, Breitengrad, Längengrad und den Namen des zugehörigen Gewässers enthalten.
+    :param None
 
-    :raises RuntimeError: Wenn ein Fehler bei der HTTP-Anfrage an die Pegel Online API auftritt.
-
-    :return: Ein Dictionary, bei dem die Schlüssel die Langnamen der Stationen (str) sind und die
-             Werte Dictionaries sind, die Details wie Stationsnummer (int), Breitengrad (float),
-             Längengrad (float) und Gewässername (str) enthalten.
+    :return: A dictionary containing station data. Each station's name acts as a key corresponding
+             to a dictionary with details such as station number, latitude, longitude, and water
+             body name.
     :rtype: dict
-    """
 
+    :raises RuntimeError: If there is an issue with the network request or fetching data from the API.
+    """
 
     url = "https://www.pegelonline.wsv.de/webservices/rest-api/v2/stations.json"
 
@@ -31,12 +29,11 @@ def load_german_station_data():
         response.raise_for_status()
         raw_data = response.json()
 
-        # Erstellt das gewünschte Dictionary
         pegel_dict = {}
         for station in raw_data:
             name = station.get("longname")
 
-            # Nur Stationen mit gültigem Namen aufnehmen
+            # Only stations with valid names are included
             if name:
                 pegel_dict[name] = {
                     "number": station.get("number"),
@@ -51,15 +48,25 @@ def load_german_station_data():
     return pegel_dict
 
 
-def load_italian_station_data(station, start, end):
+def load_italian_station_data(station: str, start:  datetime.datetime, end: datetime.datetime) -> dict or None:
     """
-    Ruft Daten von der ARPA Lombardia API oder dem Portal der AIPO ab und gibt ein Dictionary mit Stationsinformationen
-    zurück.
+    Loads water level data for an Italian station within a specific time range.
 
-    :return: Ein Dictionary, bei dem die Schlüssel die Langnamen der Stationen (str) sind und die
-             Werte Dictionaries sind, die Details wie Gewässer (str), Wasserstand (float),
-             Wassertemperatur (float) und Provider (str) enthalten.
-    :rtype: dict
+    The function retrieves data for a provided station from its corresponding provider
+    (either "ARPA Lombardia" or "AIPO").
+
+    :param station: The station identifier for which data is to be retrieved.
+    :type station: str
+    :param start: The start datetime for the data query range.
+    :type start: datetime.datetime
+    :param end: The end datetime for the data query range (inclusive).
+    :type end: datetime.datetime
+    :return: A dictionary containing the station's display name, water body,
+        water level data, and data source.
+    :rtype: dict or None
+    :raises ValueError: If station data retrieval is not supported for the provider,
+        if no level sensor is found for the station, or if no water level data is
+        available for the given time range.
     """
     station_data = find_italian_station(station)
 
@@ -110,14 +117,37 @@ def load_italian_station_data(station, start, end):
     }
 
 
-def normalize_station_name(value):
+def normalize_station_name(value: str) -> str:
+    """
+    Normalize a station name by removing extraneous characters, normalizing
+    Unicode characters, and ensuring consistent formatting. This function
+    removes leading and trailing spaces, converts text to lowercase, replaces
+    hyphens and underscores with spaces, and collapses multiple spaces into a
+    single space. Furthermore, it removes any characters with Unicode
+    combining marks.
+
+    :param value: The station name to be normalized.
+    :type value: str
+    :return: A normalized version of the station name.
+    :rtype: str
+    """
     value = value.strip().lower()
     value = unicodedata.normalize("NFKD", value)
     value = "".join(char for char in value if not unicodedata.combining(char))
     return " ".join(value.replace("-", " ").replace("_", " ").split())
 
 
-def italian_stations_dict():
+def italian_stations_dict() -> dict:
+    """
+    Builds and returns a dictionary of normalized Italian station names and their associated
+    station data. The function processes data from a JSON file, where each station may have
+    multiple aliases. Aliases are also normalized and mapped to the corresponding station
+    data in the resulting dictionary.
+
+    :return: A dictionary where the keys are normalized names of Italian stations and their
+        aliases, and the values are the associated station data loaded from the JSON file.
+    :rtype: dict
+    """
     stations = {}
 
     with open("fangreport/data/italian_stations.json", "r", encoding="utf-8") as f:
@@ -132,11 +162,51 @@ def italian_stations_dict():
     return stations
 
 
-def find_italian_station(station):
+def find_italian_station(station: str) -> dict or None:
+    """
+    Find the corresponding Italian station for the given station name.
+
+    This function attempts to find the matching Italian station from a pre-defined
+    dictionary, using a normalized version of the provided station name.
+
+    :param station: The name of the station to be searched for.
+    :type station: str
+    :return: The corresponding Italian station if found, otherwise None.
+    :rtype: str or None
+    """
     return italian_stations_dict().get(normalize_station_name(station))
 
 
-def load_arpa_lombardia_sensor_values(sensor_id, start, end):
+def load_arpa_lombardia_sensor_values(
+        sensor_id: int,
+        start: datetime.datetime,
+        end: datetime.datetime
+) -> pd.DataFrame:
+    """
+    Loads and processes water level sensor data from the ARPA Lombardia dataset for a
+    specified sensor and time range. The function retrieves the data from a public
+    API endpoint, performs validation, and formats the data for further use.
+
+    :param sensor_id: The unique identifier of the sensor whose data is to be retrieved.
+    :type sensor_id: int
+
+    :param start: The start datetime for the time range of sensor data to be fetched.
+                  Must be a timezone-aware datetime object.
+    :type start: datetime.datetime
+
+    :param end: The end datetime for the time range of sensor data to be fetched.
+                Must be a timezone-aware datetime object.
+    :type end: datetime.datetime
+
+    :return: A pandas DataFrame containing the processed water level data. The DataFrame
+             includes columns for time (as the index) and water level.
+    :rtype: pandas.DataFrame
+
+    :raises requests.exceptions.RequestException: If the HTTP request to the data API
+                                                  fails or encounters timeout issues.
+    :raises ValueError: If the data retrieved does not contain the expected columns
+                        ('data' and 'valore') for processing.
+    """
     url = "https://www.dati.lombardia.it/resource/647i-nhxk.json"
     params = {
         "$limit": 50000,

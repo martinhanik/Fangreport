@@ -8,34 +8,32 @@ import requests
 
 class AipoClient:
     """
-    Client für den Zugriff auf Messdaten der AIPo-/Agenzia-Interregionale-Po-Plattform.
+    Client for accessing measurement data from the AIPo / Agenzia Interregionale Po platform.
 
-    ## Authentifizierung
+    ## Authentication
 
-    Die AIPo-Webanwendung verwendet OAuth2/OpenID Connect mit Access- und
-    Refresh-Tokens. Die benötigten Authentifizierungsinformationen werden von
-    der Webseite im Browser-Local-Storage abgelegt:
+    The AIPo web application uses OAuth2/OpenID Connect with access and
+    refresh tokens. The required authentication credentials are stored by
+    the website in the browser's local storage:
 
     ```
     Aegis/refreshToken
     Aegis/clientInstance
     ```
 
-    Diese Werte müssen einmalig aus dem Browser übernommen werden. Der Client
-    verwendet anschließend den Refresh-Token, um automatisch neue Access-Tokens
-    über den Endpoint
+    These values must be copied from the browser once. The client
+    then uses the refresh token to automatically obtain new access tokens
+    via the endpoint
 
     ```
     https://idrometri.agenziapo.it/datascapeA/connect/token
     ```
 
-    zu beziehen.
+    The platform uses refresh token rotation. Therefore, a new refresh token
+    is returned after every successful token refresh. The client should
+    persistently store this token and use it for future requests.
 
-    Die Plattform verwendet Refresh-Token-Rotation. Nach jedem erfolgreichen
-    Token-Refresh wird daher ein neuer Refresh-Token zurückgegeben. Der Client
-    sollte diesen dauerhaft speichern und bei zukünftigen Aufrufen verwenden.
-
-    ## Verwendung
+    ## Usage
 
     ```
     client = AipoClient.from_file("aipo_auth.json")
@@ -47,41 +45,39 @@ class AipoClient:
     )
     ```
 
-    Die Methode `load_sensor_values()` liefert ein pandas.DataFrame mit den
-    Spalten:
+    The `load_sensor_values()` method returns a pandas.DataFrame with the
+    following columns:
 
     ```
-    time           Zeitstempel der Messung
-    water_level    Gemessener Sensorwert
+    time           Timestamp of the measurement
+    water_level    Measured sensor value
     ```
 
-    ## Messdaten
+    ## Measurement Data
 
-    Messwerte werden über den Endpoint
+    Measurement values are retrieved via the endpoint
 
     ```
     /datascapeA/v3/data-combo/{element_id}
     ```
 
-    abgerufen.
-
-    Die API liefert die Zeitreihe im Feld `plausibleData` als Liste von
+    The API delivers the time series in the `plausibleData` field as a list of
 
     ```
     [epoch_timestamp_ms, water_level]
     ```
 
-    welche vom Client automatisch in ein DataFrame umgewandelt wird.
+    which is automatically converted into a DataFrame by the client.
 
-    ## Hinweise
+    ## Notes
 
-    * Access-Tokens sind zeitlich begrenzt (aktuell 86400 Sekunden).
-    * Die Erneuerung erfolgt automatisch über den Refresh-Token.
-    * Der aktuelle Refresh-Token sollte nach jedem erfolgreichen Refresh
-      persistent gespeichert werden.
-    * Die `clientInstance` ist typischerweise langfristig stabil und muss
-      normalerweise nicht aktualisiert werden.
-      """
+    * Access tokens expire after a limited time (currently 86,400 seconds).
+    * Renewal happens automatically using the refresh token.
+    * The current refresh token should be persistently saved after every successful refresh.
+    * When not used for some time, the refresh token also expires and a new one must be copied from the browser.
+    * The `clientInstance` is typically stable over the long term and normally does not need to be updated.
+"""
+
 
     def __init__(self, refresh_token: str, client_instance: str):
         self.refresh_token = refresh_token
@@ -91,9 +87,9 @@ class AipoClient:
     @classmethod
     def from_file(cls, filename: str | Path) -> "AipoClient":
         """
-        Erstellt einen Client aus einer JSON-Datei.
+        Creates a client from a JSON-Datei.
 
-        Erwartetes Format:
+        Expected format:
 
         {
             "refresh_token": "...",
@@ -112,7 +108,7 @@ class AipoClient:
 
     def refresh_access_token(self) -> dict:
         """
-        Liefert access_token
+        Provides access_token
         """
 
         url = "https://idrometri.agenziapo.it/datascapeA/connect/token"
@@ -136,7 +132,7 @@ class AipoClient:
         r = r.json()
         self.refresh_token = r["refresh_token"]
 
-        # Speichern des Tokens
+        # Save tokens
         with open("fangreport/data/aipo_auth.json", "w") as f:
             json.dump(
                 {
@@ -155,8 +151,8 @@ class AipoClient:
         end: datetime,
     ) -> pd.DataFrame:
         """
-        Lädt AIPo-Messwerte und gibt ein DataFrame mit den
-        Spalten 'time' und 'water_level' zurück.
+        Loads AIPo-measurements and returns a DataFrame
+        with columns 'time' and 'water_level'.
         """
 
         url = f"https://idrometri.agenziapo.it/datascapeA/v3/data-combo/{element_id}"
@@ -176,8 +172,8 @@ class AipoClient:
         except requests.HTTPError as e:
             if e.response is not None and "invalid_grant" in e.response.text:
                 raise RuntimeError(
-                    "AIPo refresh token is no longer valid. "
-                    "Please update aipo_auth.json from the browser."
+                    "Der AIPo refresh token ist nicht mehr gültig. "
+                    "Bitte erneuern Sie ihn über den Browser."
                 ) from e
             raise
 
@@ -213,7 +209,7 @@ class AipoClient:
 
         df["time"] = pd.to_datetime(df["EpochTime"], unit="ms", utc=True).dt.tz_convert(None)
 
-        # wollen Pegelstand in cm
+        # Want water level in cm
         df["water_level"] = df["water_level"] * 100
 
         df = df.drop(columns=["EpochTime"])

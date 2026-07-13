@@ -11,18 +11,27 @@ from datetime import datetime
 from fangreport.core import generate_catch_report
 
 
+examples_dict = {
+    "example_length": "cm, z. B. 130",
+    "example_weight": "kg, z. B. 8.5",
+    "example_water_temperature": "°C, z. B. 12.5",
+    "example_water_clarity": "z. B. klar"
+}
+
+
 class FangreportApp(tk.Tk):
     """
-    GUI zur Erstellung eines Fangreports.
+    GUI for the creation of a Fangreport.
     """
     def __init__(self):
         super().__init__()
 
         self.title("Fangreport")
-        self.geometry("720x820")
-        self.minsize(680, 760)
+        self.geometry("800x950")
+        self.minsize(800, 950)
 
         self.photo_path_var = tk.StringVar()
+        self.save_dir_var = tk.StringVar(value="./fänge")
         self.status_var = tk.StringVar(value="Bereit.")
 
         self._build_ui()
@@ -54,14 +63,14 @@ class FangreportApp(tk.Tk):
 
         fields = [
             ("Fischart", "z. B. Wels", True),
-            ("Länge", "cm, z. B. 130", False),
-            ("Gewicht", "kg, z. B. 8.5", False),
+            ("Länge", examples_dict["example_length"], False),
+            ("Gewicht", examples_dict["example_weight"], False),
             ("Datum", "YYYY-MM-DD", True),
             ("Zeit", "HH:MM", True),
             ("Breiten- und Längengrad", "z. B. 49.357599616156776, 8.494281048199765", True),
             ("Pegelstation", "z. B. Speyer", True),
-            ("Wassertemperatur", "°C, z. B. 12.5", False),
-            ("Trübung", "z. B. klar", False),
+            ("Wassertemperatur", examples_dict["example_water_temperature"], False),
+            ("Trübung", examples_dict["example_water_clarity"], False),
         ]
 
         for row, (label, placeholder, required) in enumerate(fields):
@@ -102,7 +111,7 @@ class FangreportApp(tk.Tk):
 
         self.entries["Fischart"]["widget"].delete(0, tk.END)
         self.entries["Fischart"]["widget"].insert(0, "Wels")
-        self.entries["Fischart"]["widget"].configure(foreground="white")
+        self.entries["Fischart"]["widget"].configure(foreground="")
         self.entries["Fischart"]["widget"].placeholder_active = False
 
         photo_frame = ttk.LabelFrame(main_frame, text="Foto", padding=12)
@@ -125,10 +134,11 @@ class FangreportApp(tk.Tk):
             text="Entfernen",
             command=lambda: self.photo_path_var.set("")
         ).pack(side="left", padx=(8, 0))
+
         notes_frame = ttk.LabelFrame(main_frame, text="Notizen", padding=8)
         notes_frame.pack(fill="x", pady=(0, 12))
 
-        self.notes_text = tk.Text(notes_frame, height=5, wrap="word")
+        self.notes_text = tk.Text(notes_frame, height=10, wrap="word")
         self.notes_text.pack(side="left", fill="x", expand=True)
 
         notes_scrollbar = ttk.Scrollbar(
@@ -138,6 +148,22 @@ class FangreportApp(tk.Tk):
         )
         notes_scrollbar.pack(side="right", fill="y")
         self.notes_text.configure(yscrollcommand=notes_scrollbar.set)
+
+        save_frame = ttk.LabelFrame(main_frame, text="Speicherort", padding=12)
+        save_frame.pack(fill="x", pady=(0, 12))
+
+        ttk.Entry(
+            save_frame,
+            textvariable=self.save_dir_var,
+            state="readonly",
+            width=50
+        ).pack(side="left", fill="x", expand=True, padx=(0, 8))
+
+        ttk.Button(
+            save_frame,
+            text="Ordner wählen ...",
+            command=self._select_save_dir
+        ).pack(side="left")
 
         hint_label = ttk.Label(
             main_frame,
@@ -173,7 +199,7 @@ class FangreportApp(tk.Tk):
 
         if getattr(entry, "placeholder_active", False):
             entry.delete(0, tk.END)
-            entry.configure(foreground="white")
+            entry.configure(foreground="")
             entry.placeholder_active = False
 
     @staticmethod
@@ -207,6 +233,15 @@ class FangreportApp(tk.Tk):
         if file_path:
             self.photo_path_var.set(file_path)
 
+    def _select_save_dir(self):
+        directory = filedialog.askdirectory(
+            title="Speicherort für PDF auswählen",
+            initialdir=self.save_dir_var.get()
+        )
+
+        if directory:
+            self.save_dir_var.set(directory)
+
     def _validate_and_collect_data(self):
         missing_fields = []
 
@@ -226,7 +261,11 @@ class FangreportApp(tk.Tk):
         station = self._get_entry_value("Pegelstation")
         water_clarity = self._get_entry_value("Trübung") or "Keine Daten"
         photo_path = self.photo_path_var.get().strip() or None
+        report_location = self.save_dir_var.get().strip() or "./fänge"
         notes = self.notes_text.get("1.0", tk.END).strip()
+
+        if water_clarity == examples_dict["example_water_clarity"]:
+            water_clarity = "Keine Daten"
 
         try:
             datetime.strptime(date, "%Y-%m-%d")
@@ -261,7 +300,7 @@ class FangreportApp(tk.Tk):
 
         fish_length_text = self._get_entry_value("Länge")
         fish_length = None
-        if not (fish_length_text is None or fish_length_text == "cm, z. B. 130"):
+        if not (fish_length_text is None or fish_length_text == examples_dict["example_length"]):
             try:
                 fish_length = float(fish_length_text.replace(",", "."))
             except ValueError as exc:
@@ -269,7 +308,7 @@ class FangreportApp(tk.Tk):
 
         fish_weight_text = self._get_entry_value("Gewicht")
         fish_weight = None
-        if not (fish_weight_text is None or fish_weight_text == "kg, z. B. 8.5"):
+        if not (fish_weight_text is None or fish_weight_text == examples_dict["example_weight"]):
             try:
                 fish_weight = float(
                     fish_weight_text.replace(",", ".")
@@ -281,7 +320,8 @@ class FangreportApp(tk.Tk):
 
         water_temperature_text = self._get_entry_value("Wassertemperatur")
         water_temperature = None
-        if not (water_temperature_text is None or water_temperature_text == "optional, °C"):
+        if not (water_temperature_text is None
+                or water_temperature_text == examples_dict["example_water_temperature"]):
             try:
                 water_temperature = float(water_temperature_text.replace(",", "."))
             except ValueError as exc:
@@ -303,6 +343,7 @@ class FangreportApp(tk.Tk):
             "fish_weight": fish_weight,
             "water_clarity": water_clarity,
             "photo_path": photo_path,
+            "report_location": report_location,
             "notes": notes,
         }
 
@@ -343,7 +384,7 @@ class FangreportApp(tk.Tk):
         self.status_var.set("Fangreport wurde erfolgreich erstellt.")
         messagebox.showinfo(
             "Fangreport erstellt",
-            "Der Fangreport wurde erfolgreich erstellt und im Ordner „fänge“ gespeichert."
+            f"Der Fangreport wurde erfolgreich erstellt und im Ordner „{self.save_dir_var.get()}“ gespeichert."
         )
 
     def _report_failed(self, message):
