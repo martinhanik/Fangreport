@@ -1,6 +1,6 @@
 import requests
 import pandas as pd
-from datetime import timedelta
+from datetime import datetime, timedelta
 import json
 import unicodedata
 
@@ -48,7 +48,7 @@ def load_german_station_data() -> dict:
     return pegel_dict
 
 
-def load_italian_station_data(station: str, start:  datetime.datetime, end: datetime.datetime) -> dict or None:
+def load_italian_station_data(station: str, start:  datetime, end: datetime) -> dict | None:
     """
     Loads water level data for an Italian station within a specific time range.
 
@@ -58,9 +58,9 @@ def load_italian_station_data(station: str, start:  datetime.datetime, end: date
     :param station: The station identifier for which data is to be retrieved.
     :type station: str
     :param start: The start datetime for the data query range.
-    :type start: datetime.datetime
+    :type start: datetime
     :param end: The end datetime for the data query range (inclusive).
-    :type end: datetime.datetime
+    :type end: datetime
     :return: A dictionary containing the station's display name, water body,
         water level data, and data source.
     :rtype: dict or None
@@ -162,7 +162,7 @@ def italian_stations_dict() -> dict:
     return stations
 
 
-def find_italian_station(station: str) -> dict or None:
+def find_italian_station(station: str) -> dict | None:
     """
     Find the corresponding Italian station for the given station name.
 
@@ -179,8 +179,8 @@ def find_italian_station(station: str) -> dict or None:
 
 def load_arpa_lombardia_sensor_values(
         sensor_id: int,
-        start: datetime.datetime,
-        end: datetime.datetime
+        start: datetime,
+        end: datetime
 ) -> pd.DataFrame:
     """
     Loads and processes water level sensor data from the ARPA Lombardia dataset for a
@@ -192,11 +192,11 @@ def load_arpa_lombardia_sensor_values(
 
     :param start: The start datetime for the time range of sensor data to be fetched.
                   Must be a timezone-aware datetime object.
-    :type start: datetime.datetime
+    :type start: datetime
 
     :param end: The end datetime for the time range of sensor data to be fetched.
                 Must be a timezone-aware datetime object.
-    :type end: datetime.datetime
+    :type end: datetime
 
     :return: A pandas DataFrame containing the processed water level data. The DataFrame
              includes columns for time (as the index) and water level.

@@ -3,6 +3,7 @@
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 
+from typing import Optional, Any
 import os
 import requests
 import pandas as pd
@@ -109,8 +110,8 @@ def calculate_moon_phase(date_time: datetime):
 
 
 def get_nearest_value(
-        data_frame: pandas.DataFrame,
-        date_time: datetime.datetime | pandas.Timestamp,
+        data_frame: pd.DataFrame,
+        date_time: datetime | pd.Timestamp,
         column: str
 ) -> Any:
     """
