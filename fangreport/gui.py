@@ -19,6 +19,47 @@ examples_dict = {
 }
 
 
+class ScrollableFrame(ttk.Frame):
+    """
+    A scrollable frame that can contain other widgets.
+    """
+    def __init__(self, container, *args, **kwargs):
+        super().__init__(container, *args, **kwargs)
+        self.canvas = tk.Canvas(self, borderwidth=0, highlightthickness=0)
+        self.scrollbar = ttk.Scrollbar(self, orient="vertical", command=self.canvas.yview)
+        self.scrollable_frame = ttk.Frame(self.canvas)
+
+        self.scrollable_frame.bind(
+            "<Configure>",
+            lambda e: self.canvas.configure(
+                scrollregion=self.canvas.bbox("all")
+            )
+        )
+
+        self.canvas_window = self.canvas.create_window((0, 0), window=self.scrollable_frame, anchor="nw")
+
+        self.canvas.bind("<Configure>", self._on_canvas_configure)
+        self.canvas.configure(yscrollcommand=self.scrollbar.set)
+
+        self.canvas.pack(side="left", fill="both", expand=True)
+        self.scrollbar.pack(side="right", fill="y")
+
+        # Mousewheel support
+        self.canvas.bind_all("<MouseWheel>", self._on_mousewheel)
+        self.canvas.bind_all("<Button-4>", self._on_mousewheel)
+        self.canvas.bind_all("<Button-5>", self._on_mousewheel)
+
+    def _on_canvas_configure(self, event):
+        # Fill the width of the canvas
+        self.canvas.itemconfig(self.canvas_window, width=event.width)
+
+    def _on_mousewheel(self, event):
+        if event.num == 4 or event.delta > 0:
+            self.canvas.yview_scroll(-1, "units")
+        elif event.num == 5 or event.delta < 0:
+            self.canvas.yview_scroll(1, "units")
+
+
 class FangreportApp(tk.Tk):
     """
     GUI for the creation of a Fangreport.
@@ -27,8 +68,33 @@ class FangreportApp(tk.Tk):
         super().__init__()
 
         self.title("Fangreport")
-        self.geometry("800x950")
-        self.minsize(800, 950)
+
+        # Determine screen dimensions for adaptive scaling
+        screen_width = self.winfo_screenwidth()
+        screen_height = self.winfo_screenheight()
+
+        self.scaling_factor = 1.0
+        if screen_height < 1000:
+            self.scaling_factor = 0.9
+        if screen_height < 850:
+            self.scaling_factor = 0.8
+
+        try:
+            current_scaling = self.tk.call("tk", "scaling")
+            self.tk.call("tk", "scaling", current_scaling * self.scaling_factor)
+        except Exception:
+            pass
+
+        # Calculate appropriate window size
+        win_width = int(800 * self.scaling_factor)
+        win_height = int(950 * self.scaling_factor)
+
+        # Ensure it fits on screen
+        win_width = min(win_width, screen_width - 40)
+        win_height = min(win_height, screen_height - 100)
+
+        self.geometry(f"{win_width}x{win_height}")
+        self.minsize(min(600, win_width), min(600, win_height))
 
         self.photo_path_var = tk.StringVar()
         self.save_dir_var = tk.StringVar(value="./fänge")
@@ -41,18 +107,23 @@ class FangreportApp(tk.Tk):
         self.rowconfigure(0, weight=1)
         self.rowconfigure(1, weight=0)
 
-        main_frame = ttk.Frame(self, padding=16)
-        main_frame.grid(row=0, column=0, sticky="nsew")
+        # Main scrollable area
+        self.scroll_container = ScrollableFrame(self)
+        self.scroll_container.grid(row=0, column=0, sticky="nsew")
+
+        main_frame = ttk.Frame(self.scroll_container.scrollable_frame, padding=16)
+        main_frame.pack(fill="both", expand=True)
         main_frame.columnconfigure(0, weight=1)
 
         button_frame = ttk.Frame(self, padding=(16, 8, 16, 16))
         button_frame.grid(row=1, column=0, sticky="ew")
         button_frame.columnconfigure(0, weight=1)
 
+        title_font_size = int(18 * self.scaling_factor)
         title_label = ttk.Label(
             main_frame,
             text="🎣 Fangreport erstellen",
-            font=("TkDefaultFont", 18, "bold")
+            font=("TkDefaultFont", title_font_size, "bold")
         )
         title_label.pack(anchor="w", pady=(0, 12))
 

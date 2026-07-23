@@ -3,6 +3,7 @@ import pandas as pd
 from datetime import datetime, timedelta
 import json
 import unicodedata
+import numpy as np
 
 from fangreport.data_loading import AipoClient
 
@@ -249,3 +250,62 @@ def load_arpa_lombardia_sensor_values(
         data_frame.index = data_frame.index.tz_convert("Europe/Rome").tz_localize(None)
 
     return data_frame
+
+
+def clean_water_level(df):
+    """
+    Cleans the water level data by applying various filters and interpolation techniques
+    to remove outliers and handle missing or erroneous values.
+
+    This function includes a dynamic range filter based on the Interquartile Range (IQR),
+    an adaptive gradient filter utilizing the Median Absolute Deviation (MAD) with a physical
+    floor fallback, and a time-limited linear interpolation to handle missing data.
+
+    Parameters:
+        df (pandas.DataFrame): Input DataFrame with a "water_level" column and a datetime index.
+        The index must be uniformly spaced so time differences can be calculated accurately.
+
+    Returns:
+        pandas.DataFrame: A new DataFrame with the cleaned "water_level" data. Outliers and
+        invalid data are replaced with NaN, and small gaps are interpolated based on the
+        specified time-limit threshold.
+    """
+    df_clean = df.copy()
+    time_delta_m = (df.index[1] - df.index[0]).to_numpy().astype("timedelta64[m]").astype(int)
+
+    # Dynamic range filter using Interquartile Range (IQR) method
+    q1 = df_clean["water_level"].quantile(0.25)
+    q3 = df_clean["water_level"].quantile(0.75)
+    iqr = q3 - q1
+
+    lower_bound = q1 - 3 * iqr
+    upper_bound = q3 + 3 * iqr
+
+    df_clean.loc[
+        (df_clean["water_level"] < lower_bound)
+        | (df_clean["water_level"] > upper_bound),
+        "water_level",
+    ] = np.nan
+
+    # Adaptive gradient filter using MAD with a fallback floor tolerance
+    df_clean["diff"] = df_clean["water_level"].diff()
+
+    med_diff = df_clean["diff"].median()
+    mad_diff = (df_clean["diff"] - med_diff).abs().median()
+
+    # Set a physical floor
+    min_physical_floor = 15.0 * (time_delta_m / 15.0)
+    max_allowed_diff = max(min_physical_floor, med_diff + 5 * mad_diff)
+
+    is_spike = df_clean["diff"].abs() > max_allowed_diff
+    df_clean.loc[is_spike, "water_level"] = np.nan
+
+    # Time-limited linear interpolation (max 2 hours)
+    max_gap_limit = max(1, int(120 / time_delta_m))
+    df_clean["water_level"] = df_clean["water_level"].interpolate(
+        method="linear", limit=max_gap_limit
+    )
+
+    df_clean.drop(columns=["diff"], errors="ignore", inplace=True)
+
+    return df_clean

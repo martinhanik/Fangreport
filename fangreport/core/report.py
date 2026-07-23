@@ -20,7 +20,7 @@ import scipy.stats as stats
 from datetime import datetime, timedelta
 from PIL import Image
 
-from fangreport.data_loading.water_level import load_italian_station_data, load_german_station_data
+from fangreport.data_loading.water_level import load_italian_station_data, load_german_station_data, clean_water_level
 
 
 def describe_weather_code(code: int | str) -> str:
@@ -512,8 +512,7 @@ def generate_catch_report(
         # Set wrong values to None
         df_water_level["water_level"] = df_water_level["water_level"].astype("Float64")
 
-        cond = np.abs(df_water_level["water_level"]) > 10 ** 5
-        df_water_level["water_level"] = df_water_level["water_level"].mask(cond, pd.NA)
+        df_water_level = clean_water_level(df_water_level)
 
         air_temperature_at_catch = get_nearest_value(df_weather, catch_datetime, "temperature")
         air_pressure_at_catch = get_nearest_value(df_weather, catch_datetime, "air_pressure")
